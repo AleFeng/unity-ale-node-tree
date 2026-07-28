@@ -1,4 +1,4 @@
-Shader "StoryTree/StoryLineFlow"
+Shader "NodeTree/NodeLineFlow"
 {
     Properties
     {
@@ -29,7 +29,7 @@ Shader "StoryTree/StoryLineFlow"
 
         Pass
         {
-            Name "StoryLineFlow"
+            Name "NodeLineFlow"
             Tags { "LightMode" = "UniversalForward" }
 
             HLSLPROGRAM

@@ -28,7 +28,7 @@ MonoBehaviour:
     - Locale-ko
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cbbdd9d7db289774c9835199de74ca78
-    m_Address: StoryTreeSystem_ko
+    m_Address: NodeTreeSystem_ko
     m_ReadOnly: 1
     m_SerializedLabels:
     - Locale-ko

@@ -1,13 +1,13 @@
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事条件检查器接口。
-    /// 外部系统通过实现此接口并注册到 StoryConditionManager，
-    /// 来为故事节点提供自定义的解锁条件判断逻辑。
+    /// 节点条件检查器接口。
+    /// 外部系统通过实现此接口并注册到 NodeConditionManager，
+    /// 来为节点提供自定义的解锁条件判断逻辑。
     /// </summary>
     public interface INodeConditionChecker
     {
-        /// <summary>此检查器处理的条件类型标识，与 StoryConditionTypeData.conditionType 对应。</summary>
+        /// <summary>此检查器处理的条件类型标识，与 NodeConditionTypeData.conditionType 对应。</summary>
         string ConditionType { get; }
 
         /// <summary>

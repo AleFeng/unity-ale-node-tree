@@ -8,8 +8,8 @@ using Ale.NodeTree.Runtime;
 namespace Ale.NodeTree.Editor
 {
     /// <summary>
-    /// 故事树可视化编辑器主窗口（IMGUI + GL）。
-    /// 通过菜单 Tools/StoryTree/Story Tree Editor 或 ConfigStoryTree Inspector 按钮打开。
+    /// 节点树可视化编辑器主窗口（IMGUI + GL）。
+    /// 通过菜单 Tools/NodeTree/Node Tree Editor 或 NodeTreeData Inspector 按钮打开。
     /// 三列布局：左侧节点/条件类型管理 | 中央画布（节点拖拽/缩放/平移/连线） | 右侧节点属性面板。
     /// 所有修改通过 Undo.RecordObject + EditorUtility.SetDirty 支持撤销并触发资产保存。
     /// </summary>
@@ -27,13 +27,13 @@ namespace Ale.NodeTree.Editor
         
         #region 基础功能
         // ── 数据 ──
-        private NodeTreeData _config;                              // 当前编辑的故事树配置资产
+        private NodeTreeData _config;                              // 当前编辑的节点树配置资产
         private NodeTreeCanvasState _canvas = new NodeTreeCanvasState(); // 画布交互状态（平移/缩放/选中/拖拽）
         // ── 持久化键（PlayerPrefs） ──
-        private const string PrefKeyConfigPath = "StoryTreeSystem.ConfigPath"; // 上次打开的配置文件资产路径
-        private const string PrefKeyPanX       = "StoryTreeSystem.PanX";      // 画布平移 X 分量
-        private const string PrefKeyPanY       = "StoryTreeSystem.PanY";      // 画布平移 Y 分量
-        private const string PrefKeyZoom       = "StoryTreeSystem.Zoom";      // 画布缩放比例
+        private const string PrefKeyConfigPath = "NodeTreeSystem.ConfigPath"; // 上次打开的配置文件资产路径
+        private const string PrefKeyPanX       = "NodeTreeSystem.PanX";      // 画布平移 X 分量
+        private const string PrefKeyPanY       = "NodeTreeSystem.PanY";      // 画布平移 Y 分量
+        private const string PrefKeyZoom       = "NodeTreeSystem.Zoom";      // 画布缩放比例
         // ── 列表编辑器 ──
         private ReorderableList _nodeTypeList;      // 左侧节点类型可重排列表
         private ReorderableList _conditionTypeList; // 左侧条件类型可重排列表
@@ -46,7 +46,7 @@ namespace Ale.NodeTree.Editor
         private int    _snapNodeTypeIdx = -1; // Layout 事件时快照的节点类型选中索引
         
         /// <summary>通过菜单打开编辑器窗口（无配置文件预加载）。</summary>
-        [MenuItem("Tools/StoryTree/Story Tree Editor")]
+        [MenuItem("Tools/NodeTree/Node Tree Editor")]
         public static void Open()
         {
             var window = OpenWindow();
@@ -55,7 +55,7 @@ namespace Ale.NodeTree.Editor
 
         /// <summary>
         /// 打开编辑器窗口并加载指定配置文件。
-        /// 由 ConfigStoryTreeEditor Inspector 按钮调用。
+        /// 由 NodeTreeDataEditor Inspector 按钮调用。
         /// </summary>
         public static void Open(NodeTreeData config)
         {
@@ -77,7 +77,7 @@ namespace Ale.NodeTree.Editor
         private static NodeTreeEditorWindow OpenWindow()
         {
             bool isNew = !HasOpenInstances<NodeTreeEditorWindow>();
-            var window = GetWindow<NodeTreeEditorWindow>("Story Tree Editor");
+            var window = GetWindow<NodeTreeEditorWindow>("Node Tree Editor");
             window.minSize = WindowMinSize;
             if (isNew)
             {
@@ -191,7 +191,7 @@ namespace Ale.NodeTree.Editor
         
         /// <summary>
         /// 根据当前 _config 重建 左侧节点类型列表 和 条件类型列表的 ReorderableList，
-        /// 并刷新类型名称缓存数组。由 ConfigStoryTreeEditor 的 internal 可见性调用。
+        /// 并刷新类型名称缓存数组。由 NodeTreeDataEditor 的 internal 可见性调用。
         /// </summary>
         internal void RebuildLists()
         {
@@ -420,7 +420,7 @@ namespace Ale.NodeTree.Editor
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.FlexibleSpace();
-                GUILayout.Label("请在工具栏中选择或创建一个 ConfigStoryTree 资产", EditorStyles.centeredGreyMiniLabel);
+                GUILayout.Label("请在工具栏中选择或创建一个 ConfigNodeTree 资产", EditorStyles.centeredGreyMiniLabel);
                 GUILayout.FlexibleSpace();
             }
             GUILayout.FlexibleSpace();
@@ -664,7 +664,7 @@ namespace Ale.NodeTree.Editor
                 node.nodeTypeRef = _nodeTypeNames[newTypeIdx];
 
             EditorGUILayout.Space(4f);
-            // 描述（多行文本）—— 顺序与 StoryNodeData 字段定义一致
+            // 描述（多行文本）—— 顺序与 NodeData 字段定义一致
             EditorGUILayout.LabelField("备注 (仅编辑器使用)");
             node.comment = EditorGUILayout.TextArea(node.comment, GUILayout.MinHeight(60f));
             
@@ -832,17 +832,6 @@ namespace Ale.NodeTree.Editor
             if (EditorGUI.EndChangeCheck())
                 MarkDirty();
         }
-        
-        /// <summary>
-        /// 按需创建或重建 SerializedObject 缓存。
-        /// 当 _serializedConfig 为 null 或目标对象与当前 _config 不一致时重新创建，
-        /// 用于在右侧属性面板通过 PropertyField 渲染 LocalizedString 的自定义属性抽屉。
-        /// </summary>
-        private void EnsureSerializedConfig()
-        {
-            if (_serializedConfig == null || _serializedConfig.targetObject != _config)
-                _serializedConfig = new SerializedObject(_config);
-        }
         #endregion
 
         #region 节点类型 编辑面板
@@ -853,7 +842,7 @@ namespace Ale.NodeTree.Editor
         /// </summary>
         private void DrawNodeTypeProperties(NodeTypeData type)
         {
-            EditorGUILayout.LabelField("节点类型属性", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("节点类型", EditorStyles.boldLabel);
             EditorGUILayout.Space(4f);
 
             EditorGUI.BeginChangeCheck();
@@ -873,7 +862,7 @@ namespace Ale.NodeTree.Editor
             EditorGUILayout.Space(8f);
             EditorGUILayout.LabelField("连线样式", EditorStyles.boldLabel);
 
-            if (type.line == null) type.line = new StoryLineTypeData();
+            if (type.line == null) type.line = new LineTypeData();
             type.line.lineType  = (ELineType)EditorGUILayout.EnumPopup("连线类型", type.line.lineType);
             type.line.lineWidth = EditorGUILayout.FloatField("连线宽度", type.line.lineWidth);
             type.line.material  = (Material)EditorGUILayout.ObjectField(
@@ -1001,7 +990,7 @@ namespace Ale.NodeTree.Editor
         private string _snapHoveredNodeId;   // Layout 快照
         
         /// <summary>
-        /// 遍历所有节点，通过 StoryNodeDrawer.DrawNode 绘制节点，
+        /// 遍历所有节点，通过 NodeDrawer.DrawNode 绘制节点，
         /// 并处理左键点击（选中/开始拖拽）和右键点击（弹出上下文菜单）。
         /// 节点矩形基于 _canvas.GetNodeScreenRect 计算（含缩放）。
         /// GL 绘制会绕过 IMGUI BeginClip 裁剪，因此在 CPU 侧做视口剔除：
@@ -1398,7 +1387,7 @@ namespace Ale.NodeTree.Editor
                 position    = newPos
             };
 
-            // 默认条件组：要求父节点已完成（故事树的基本推进逻辑）
+            // 默认条件组：要求父节点已完成（节点树的基本推进逻辑）
             // conditionType = "NodeFinished"（内置检查器），conditionParam = 父节点 ID
             newNode.conditionGroups.Add(new ConditionGroupData
             {
@@ -1525,7 +1514,7 @@ namespace Ale.NodeTree.Editor
         /// 删除 指定节点。
         /// 其直接子节点提升到父节点下（保持相对顺序）。
         /// 选中的节点被删除后取消选中。
-        /// 故事树至少保留一个节点，仅剩一个时拒绝删除并弹出提示。
+        /// 节点树至少保留一个节点，仅剩一个时拒绝删除并弹出提示。
         /// </summary>
         private void DeleteNode(string nodeId)
         {
@@ -1533,7 +1522,7 @@ namespace Ale.NodeTree.Editor
 
             if (_config.nodes.Count <= 1)
             {
-                EditorUtility.DisplayDialog("无法删除", "故事树至少需要保留一个节点。", "确定");
+                EditorUtility.DisplayDialog("无法删除", "节点树至少需要保留一个节点。", "确定");
                 return;
             }
 
@@ -1570,7 +1559,7 @@ namespace Ale.NodeTree.Editor
         /// 切除 所有子节点。
         /// 切除以指定节点为根的整棵子树（含该节点及其所有后代），
         /// 并将该节点从其父节点的 childNodeIds 中移除。
-        /// 若子树涵盖所有节点（即会清空故事树），则拒绝操作并弹出提示。
+        /// 若子树涵盖所有节点（即会清空节点树），则拒绝操作并弹出提示。
         /// </summary>
         private void CutSubtree(string nodeId)
         {
@@ -1582,7 +1571,7 @@ namespace Ale.NodeTree.Editor
 
             if (toDelete.Count >= _config.nodes.Count)
             {
-                EditorUtility.DisplayDialog("无法切除", "故事树至少需要保留一个节点。", "确定");
+                EditorUtility.DisplayDialog("无法切除", "节点树至少需要保留一个节点。", "确定");
                 return;
             }
 
@@ -1725,7 +1714,7 @@ namespace Ale.NodeTree.Editor
             //if (!ClipLineToRect(localBounds, ref clippedFrom, ref clippedTo)) return;
 
             var nodeType  = _config.GetNodeType(sourceNode.nodeTypeRef);
-            var lineStyle = nodeType?.line ?? new StoryLineTypeData();
+            var lineStyle = nodeType?.line ?? new LineTypeData();
             NodeDrawer.DrawLineConnection(clippedFrom, clippedTo, lineStyle,
                 _config.layoutDirection, new Color(1f, 1f, 0.2f, 0.75f), _canvas.Zoom);
         }

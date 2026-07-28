@@ -28,7 +28,7 @@ MonoBehaviour:
     - Locale-zh-Hans
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d59d89893e1876347a95a84880d6d9ec
-    m_Address: StoryTreeSystem_zh-Hans
+    m_Address: NodeTreeSystem_zh-Hans
     m_ReadOnly: 1
     m_SerializedLabels:
     - Locale-zh-Hans

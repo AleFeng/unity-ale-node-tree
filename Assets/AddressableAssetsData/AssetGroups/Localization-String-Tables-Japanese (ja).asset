@@ -16,7 +16,7 @@ MonoBehaviour:
   m_GUID: bee2c914c8fd08c428554bf85a8fa5c5
   m_SerializeEntries:
   - m_GUID: 3af3136b73957c14f8133eef53f945b6
-    m_Address: StoryTreeSystem_ja
+    m_Address: NodeTreeSystem_ja
     m_ReadOnly: 1
     m_SerializedLabels:
     - Locale-ja

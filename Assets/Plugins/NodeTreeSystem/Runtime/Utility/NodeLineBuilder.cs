@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事树连线 Mesh 构建工具（静态类，Runtime 可用）。
+    /// 节点树连线 Mesh 构建工具（静态类，Runtime 可用）。
     /// 负责：
     ///  - 将一批父→子线段合并为单个 Mesh（减少 DrawCall）；
     ///  - 提供贝塞尔曲线几何辅助方法（可被 Runtime 和 Editor 共用）。
@@ -21,7 +21,7 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         public static Mesh BuildCombinedLineMesh(
             List<(Vector3 from, Vector3 to)> segments,
-            StoryLineTypeData lineData,
+            LineTypeData lineData,
             ELayoutDirection dir)
         {
             if (lineData == null || segments == null || segments.Count == 0) return null;
@@ -49,7 +49,7 @@ namespace Ale.NodeTree.Runtime
             }
 
             var mesh = new Mesh();
-            mesh.name = "StoryLineMesh";
+            mesh.name = "NodeLineMesh";
             mesh.SetVertices(vertices);
             mesh.SetUVs(0, uvs);
             mesh.SetTriangles(triangles, 0);

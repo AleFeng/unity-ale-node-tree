@@ -6,7 +6,7 @@ using Ale.NodeTree.Runtime;
 namespace Ale.NodeTree.Editor
 {
     /// <summary>
-    /// 故事节点编辑器绘制工具（静态类）。
+    /// 节点编辑器绘制工具（静态类）。
     /// 使用 IMGUI + GL 在编辑器画布上绘制节点形状（圆形/矩形/多边形等）
     /// 以及父子节点之间的连线（直线/贝塞尔曲线/折线）。
     /// 所有 GL 绘制方法必须在 EventType.Repaint 期间调用。
@@ -470,7 +470,7 @@ namespace Ale.NodeTree.Editor
         /// </summary>
         public static void GetArrowTipAndDir(
             Vector2 from, Vector2 to,
-            StoryLineTypeData lineStyle,
+            LineTypeData lineStyle,
             ELayoutDirection dir,
             float radius,
             out Vector2 arrowTip,
@@ -673,14 +673,14 @@ namespace Ale.NodeTree.Editor
         /// zoom 为画布缩放比例，连线宽度随缩放等比缩放，默认 1。
         ///
         /// ⚠ 坐标系注意：
-        /// StoryLineBuilder 遵循 Unity UI 坐标系（Y 轴向上）；
+        /// NodeLineBuilder 遵循 Unity UI 坐标系（Y 轴向上）；
         /// 编辑器 GL 使用屏幕坐标系（Y 轴向下）。
         /// 贝塞尔曲线控制点的竖直分量方向相反，因此传入前需翻转 Top2Bottom ↔ Bottom2Top。
         /// 直线与折线的中点计算与 Y 轴方向无关，无需翻转。
         /// </summary>
         public static void DrawLineConnection(
             Vector2 from, Vector2 to,
-            StoryLineTypeData lineStyle,
+            LineTypeData lineStyle,
             ELayoutDirection dir,
             Color? colorOverride = null,
             float zoom = 1f)
@@ -703,7 +703,7 @@ namespace Ale.NodeTree.Editor
                     NodeLineBuilder.AppendStraightSegment(f3, t3, halfWidth, verts, uvs, tris);
                     break;
                 case ELineType.Curve:
-                    // 屏幕空间 Y 轴向下，与 StoryLineBuilder UI 空间 Y 轴向上相反；翻转竖直方向以保持控制点方向正确
+                    // 屏幕空间 Y 轴向下，与 NodeLineBuilder UI 空间 Y 轴向上相反；翻转竖直方向以保持控制点方向正确
                     NodeLineBuilder.AppendCurveSegment(f3, t3, halfWidth, FlipVerticalDir(dir), verts, uvs, tris);
                     break;
                 case ELineType.Polyline:

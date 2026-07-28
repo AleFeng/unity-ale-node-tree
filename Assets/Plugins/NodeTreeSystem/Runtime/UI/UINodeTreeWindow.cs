@@ -5,36 +5,36 @@ using UnityEngine;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 游戏运行时故事树UI主窗口（独立 MonoBehaviour）。
+    /// 游戏运行时节点树UI主窗口（独立 MonoBehaviour）。
     /// 负责：
-    ///  - 根据所有节点的位置和尺寸自动计算并设置 storyNodeTreeRoot 的 Size；
+    ///  - 根据所有节点的位置和尺寸自动计算并设置 nodeTreeRoot 的 Size；
     ///  - 按节点类型为节点UI维护 ToolkitGameObjectPool 对象池；
     ///  - 通过视口裁剪按需 Spawn/Despawn 节点UI；
     ///  - 为每种节点类型合并生成连线 Mesh（减少 DrawCall），
-    ///    UV.x 用于边缘渐变，UV.y 用于流动效果（配合 StoryLineFlow.shader）；
+    ///    UV.x 用于边缘渐变，UV.y 用于流动效果（配合 NodeLineFlow.shader）；
     ///  - 在 LateUpdate 中按脏标记按需重建连线 Mesh。
     /// </summary>
     public class UINodeTreeWindow : MonoBehaviour
     {
         [Header("基础配置")]
-        [Tooltip("故事树配置资产：包含节点实例、节点类型定义等数据。")]
+        [Tooltip("节点树配置资产：包含节点实例、节点类型定义等数据。")]
         [SerializeField] private NodeTreeData config;
 
-        [Tooltip("故事节点树UI根容器（通常为 ScrollView 的 Content 节点）。\n" +
+        [Tooltip("节点树UI根容器（通常为 ScrollView 的 Content 节点）。\n" +
                  "运行时会在此节点下自动创建 LineContainer（连线层，最底层）\n" +
                  "和 NodeContainer（节点层，最顶层），并自动计算根容器的 Size。")]
-        [SerializeField] private RectTransform storyNodeTreeRoot;
-        [Tooltip("故事节点树四周内边距（x=左, y=上, z=右, w=下）。\n" +
+        [SerializeField] private RectTransform nodeTreeRoot;
+        [Tooltip("节点树四周内边距（x=左, y=上, z=右, w=下）。\n" +
                  "在所有节点的外围增加留白，避免节点被 ScrollView 边缘裁剪。")]
-        [SerializeField] private Vector4 storyNodeTreePadding = new Vector4(100f, 100f, 100f, 100f);
+        [SerializeField] private Vector4 nodeTreePadding = new Vector4(100f, 100f, 100f, 100f);
 
         /// <summary>
-        /// 将编辑器画布坐标系下的节点位置整体偏移到 storyNodeTreeRoot 局部坐标系。
+        /// 将编辑器画布坐标系下的节点位置整体偏移到 nodeTreeRoot 局部坐标系。
         /// 由 CalcAndSetRootSize() 计算，使最顶/最左节点的边缘紧贴内边距。
         /// </summary>
         private Vector2 _nodePositionOffset;
-
-        private string _selectedNodeId; // 当前选中的节点 ID
+        // 当前选中的节点 ID
+        private string _selectedNodeId;
 
         // ── Unity 生命周期 ──
 
@@ -70,7 +70,7 @@ namespace Ale.NodeTree.Runtime
 
         #region 公开接口
         /// <summary>
-        /// 初始化整棵故事树UI：
+        /// 初始化整棵节点树UI：
         /// 1. 校验配置数据；2. 创建容器；3. 计算并设置根容器 Size；
         /// 4. 初始化对象池；5. 初始化连线 Mesh 渲染器；6. 标记连线脏。
         /// configOverride 不为 null 时替换当前配置资产。
@@ -80,7 +80,7 @@ namespace Ale.NodeTree.Runtime
             if (configOverride) config = configOverride;
             if (!config)
             {
-                Debug.LogWarning("[UIStoryTreeWindow] config（ConfigStoryTree）未赋值，无法初始化故事树。", this);
+                Debug.LogWarning("[UINodeTreeWindow] config（ConfigNodeTree）未赋值，无法初始化节点树。", this);
                 return;
             }
 
@@ -112,7 +112,7 @@ namespace Ale.NodeTree.Runtime
         
         /// <summary>
         /// 将节点的编辑器画布坐标（已加 _nodePositionOffset）转换为连线 Mesh 顶点局部坐标。
-        /// LineContainer 和 NodeContainer 均以 stretch 模式附着于 storyNodeTreeRoot，
+        /// LineContainer 和 NodeContainer 均以 stretch 模式附着于 nodeTreeRoot，
         /// 因此三者局部坐标系完全一致，直接使用偏移后的 UI 坐标即可。
         /// </summary>
         private Vector3 NodeDataToLineLocalPos(NodeData node)
@@ -125,21 +125,21 @@ namespace Ale.NodeTree.Runtime
         #endregion
         
         #region 初始化
-        // 两者均使用 RectTransform stretch 模式，自动跟随 storyNodeTreeRoot 的 Size 变化。
+        // 两者均使用 RectTransform stretch 模式，自动跟随 nodeTreeRoot 的 Size 变化。
         private RectTransform _lineContainer; // 连线 Mesh 层，firstSibling（渲染在节点之下）
         private RectTransform _nodeContainer; // 节点 UI 层，lastSibling（渲染在连线之上）
         
         /// <summary>
-        /// 确保 LineContainer 和 NodeContainer 已在 storyNodeTreeRoot 下创建。
-        /// 两者均挂载 RectTransform 并设置为 stretch 模式，自动适应 storyNodeTreeRoot 的 Size。
+        /// 确保 LineContainer 和 NodeContainer 已在 nodeTreeRoot 下创建。
+        /// 两者均挂载 RectTransform 并设置为 stretch 模式，自动适应 nodeTreeRoot 的 Size。
         /// 层级顺序：LineContainer（firstSibling）在下，NodeContainer（lastSibling）在上。
         /// </summary>
         private void EnsureContainers()
         {
-            if (!storyNodeTreeRoot) return;
+            if (!nodeTreeRoot) return;
 
             // ── 连线容器（最先渲染，在节点之下）──
-            var lineT = storyNodeTreeRoot.Find("LineContainer");
+            var lineT = nodeTreeRoot.Find("LineContainer");
             if (lineT)
             {
                 // 已存在：确保有 RectTransform 组件
@@ -150,10 +150,10 @@ namespace Ale.NodeTree.Runtime
             {
                 var go = new GameObject("LineContainer");
                 _lineContainer = go.AddComponent<RectTransform>();
-                _lineContainer.SetParent(storyNodeTreeRoot, false);
+                _lineContainer.SetParent(nodeTreeRoot, false);
                 _lineContainer.SetAsFirstSibling();
             }
-            // stretch 模式：锚点铺满父容器，自动跟随 storyNodeTreeRoot.sizeDelta 变化
+            // stretch 模式：锚点铺满父容器，自动跟随 nodeTreeRoot.sizeDelta 变化
             // pivot=(0,0) 使局部坐标原点位于左下角，与节点 anchoredPosition 坐标系保持一致
             _lineContainer.pivot     = Vector2.zero;
             _lineContainer.anchorMin = Vector2.zero;
@@ -162,7 +162,7 @@ namespace Ale.NodeTree.Runtime
             _lineContainer.offsetMax = Vector2.zero;
 
             // ── 节点容器（最后渲染，在连线之上）──
-            var nodeT = storyNodeTreeRoot.Find("NodeContainer");
+            var nodeT = nodeTreeRoot.Find("NodeContainer");
             if (nodeT)
             {
                 _nodeContainer = nodeT.GetComponent<RectTransform>()
@@ -172,7 +172,7 @@ namespace Ale.NodeTree.Runtime
             {
                 var go = new GameObject("NodeContainer");
                 _nodeContainer = go.AddComponent<RectTransform>();
-                _nodeContainer.SetParent(storyNodeTreeRoot, false);
+                _nodeContainer.SetParent(nodeTreeRoot, false);
                 _nodeContainer.SetAsLastSibling();
             }
             // stretch 模式
@@ -186,16 +186,16 @@ namespace Ale.NodeTree.Runtime
 
         /// <summary>
         /// 遍历所有节点，计算其在编辑器画布坐标系中的总包围盒，
-        /// 加上四周内边距后设置 storyNodeTreeRoot.sizeDelta，
-        /// 同时计算 _nodePositionOffset（使各节点在 storyNodeTreeRoot 局部空间内正确排布）。
+        /// 加上四周内边距后设置 nodeTreeRoot.sizeDelta，
+        /// 同时计算 _nodePositionOffset（使各节点在 nodeTreeRoot 局部空间内正确排布）。
         ///
-        /// storyNodeTreePadding 布局：x=左, y=上, z=右, w=下。
+        /// nodeTreePadding 布局：x=左, y=上, z=右, w=下。
         /// 偏移量 = (-minX + padLeft, -minY + padTop)，
         /// 使最小包围盒的左上角节点从内边距起始位置开始。
         /// </summary>
         private void CalcAndSetRootSize()
         {
-            if (!storyNodeTreeRoot || config == null
+            if (!nodeTreeRoot || config == null
                 || config.nodes == null || config.nodes.Count == 0)
             {
                 _nodePositionOffset = Vector2.zero;
@@ -219,13 +219,13 @@ namespace Ale.NodeTree.Runtime
                 maxY = Mathf.Max(maxY, node.position.y + halfH);
             }
 
-            // storyNodeTreePadding: x=左, y=上, z=右, w=下
-            float padL = storyNodeTreePadding.x, padT = storyNodeTreePadding.y;
-            float padR = storyNodeTreePadding.z, padB = storyNodeTreePadding.w;
+            // nodeTreePadding: x=左, y=上, z=右, w=下
+            float padL = nodeTreePadding.x, padT = nodeTreePadding.y;
+            float padR = nodeTreePadding.z, padB = nodeTreePadding.w;
 
             float contentW = (maxX - minX) + padL + padR;
             float contentH = (maxY - minY) + padT + padB;
-            storyNodeTreeRoot.sizeDelta = new Vector2(contentW, contentH);
+            nodeTreeRoot.sizeDelta = new Vector2(contentW, contentH);
 
             // 整体偏移量：使最小包围盒的边缘紧贴内边距。
             // Unity UI 中 Y 轴向上，minX/minY 对应包围盒的左/下边缘，
@@ -260,10 +260,10 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         private void ValidateConfig()
         {
-            string cfgName = $"[UIStoryTreeWindow ({config.name})]";
+            string cfgName = $"[UINodeTreeWindow ({config.name})]";
 
-            if (!storyNodeTreeRoot)
-                Debug.LogWarning($"{cfgName} storyNodeTreeRoot 未赋值，节点UI将无法正确挂载。", this);
+            if (!nodeTreeRoot)
+                Debug.LogWarning($"{cfgName} nodeTreeRoot 未赋值，节点UI将无法正确挂载。", this);
 
             if (config.nodeTypes == null || config.nodeTypes.Count == 0)
             {
@@ -294,7 +294,7 @@ namespace Ale.NodeTree.Runtime
 
             if (config.nodes == null || config.nodes.Count == 0)
             {
-                Debug.LogWarning($"{cfgName} 节点列表（nodes）为空，故事树中没有任何节点。", this);
+                Debug.LogWarning($"{cfgName} 节点列表（nodes）为空，节点树中没有任何节点。", this);
                 return;
             }
 
@@ -337,7 +337,7 @@ namespace Ale.NodeTree.Runtime
         #endregion
         #endregion
         
-        #region 故事节点
+        #region 节点
         // 对象池：key = typeName
         private readonly Dictionary<string, ToolkitGameObjectPool> _pools
             = new Dictionary<string, ToolkitGameObjectPool>();
@@ -370,14 +370,14 @@ namespace Ale.NodeTree.Runtime
 
         /// <summary>
         /// 从对应类型的对象池 Spawn 一个节点UI，绑定数据并设置 RectTransform 位置。
-        /// anchoredPosition = 节点画布坐标 + _nodePositionOffset，使坐标系与 storyNodeTreeRoot 一致。
+        /// anchoredPosition = 节点画布坐标 + _nodePositionOffset，使坐标系与 nodeTreeRoot 一致。
         /// nodeData.nodeTypeRef 在 _pools 中不存在时返回 null。
         /// </summary>
         private void SpawnNode(NodeData nodeData)
         {
             if (!_pools.TryGetValue(nodeData.nodeTypeRef, out var pool)) return;
 
-            var parent = _nodeContainer ? (Transform)_nodeContainer : storyNodeTreeRoot;
+            var parent = _nodeContainer ? (Transform)_nodeContainer : nodeTreeRoot;
             var nodeInstance = pool.Spawn(Vector3.zero, Quaternion.identity, parent);
             var nodeUI = nodeInstance.GetComponent<UINodeBase>();
             if (!nodeUI) return;
@@ -386,7 +386,7 @@ namespace Ale.NodeTree.Runtime
             nodeUI.OnBindData(nodeData, nodeType);
 
             // anchoredPosition = 节点画布坐标 + 整体偏移量
-            // 偏移量由 CalcAndSetRootSize() 计算，确保所有节点位于 storyNodeTreeRoot 范围内
+            // 偏移量由 CalcAndSetRootSize() 计算，确保所有节点位于 nodeTreeRoot 范围内
             if (nodeInstance.TryGetComponent<RectTransform>(out var rt))
             {
                 rt.anchorMin = Vector2.zero;
@@ -532,7 +532,7 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         private static Mesh BuildCombinedLineMesh(
             List<(Vector3 from, Vector3 to)> segments,
-            StoryLineTypeData lineData,
+            LineTypeData lineData,
             ELayoutDirection dir)
             => NodeLineBuilder.BuildCombinedLineMesh(segments, lineData, dir);
         #endregion
@@ -554,7 +554,7 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         public void RefreshVisibility()
         {
-            if (!config || !storyNodeTreeRoot || !_nodeContainer) return;
+            if (!config || !nodeTreeRoot || !_nodeContainer) return;
 
             // 屏幕边界（含裁剪缓冲）
             var screenMin = new Vector2(-cullPadding, -cullPadding);

@@ -22,7 +22,7 @@ MonoBehaviour:
     - Locale-ru
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 4edae29c221b863448a6eafdf9236716
-    m_Address: StoryTreeSystem_ru
+    m_Address: NodeTreeSystem_ru
     m_ReadOnly: 1
     m_SerializedLabels:
     - Locale-ru

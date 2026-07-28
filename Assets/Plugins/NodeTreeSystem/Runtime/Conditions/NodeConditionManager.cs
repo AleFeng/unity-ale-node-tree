@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事条件管理器（静态单例）。
+    /// 节点条件管理器（静态单例）。
     /// 负责注册、注销条件检查器，并按 conditionType 路由执行条件检查。
     /// 初始化时自动注册内置的 NodeUnlockedChecker 和 NodeFinishedChecker。
     /// </summary>
@@ -39,7 +39,7 @@ namespace Ale.NodeTree.Runtime
         /// <summary>
         /// 执行条件检查。conditionType 为空或未注册时返回 true（不阻断流程）。
         /// </summary>
-        /// <param name="conditionType">条件类型标识，对应已注册的 IStoryConditionChecker.ConditionType。</param>
+        /// <param name="conditionType">条件类型标识，对应已注册的 INodeConditionChecker.ConditionType。</param>
         /// <param name="conditionParam">条件参数字符串，由检查器自行解析。</param>
         /// <param name="comparison">比较方式，传递给检查器供其实现具体逻辑。</param>
         /// <param name="context">调用方传入的上下文对象，可为 null。</param>

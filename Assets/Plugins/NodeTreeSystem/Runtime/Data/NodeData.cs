@@ -9,16 +9,16 @@ using UnityEngine.Localization;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事节点实例数据。存储在 ConfigStoryTree.nodes 列表中，
-    /// 代表故事树中的一个具体节点，包含展示信息、条件组、自定义数据及子节点引用。
+    /// 节点实例数据。存储在 NodeTreeData.nodes 列表中，
+    /// 代表节点树中的一个具体节点，包含展示信息、条件组、自定义数据及子节点引用。
     /// </summary>
     [Serializable]
     public class NodeData
     {
         [Header("基础设置")]
-        [Tooltip("节点ID: 必须在同一 ConfigStoryTree 内唯一")]
+        [Tooltip("节点ID: 必须在同一 NodeTreeData 内唯一")]
         public string nodeId;
-        [Tooltip("节点类型引用: 必须对应 ConfigStoryTree.nodeTypes 中的某个 StoryNodeTypeData.typeName")]
+        [Tooltip("节点类型引用: 必须对应 NodeTreeData.nodeTypes 中的某个 NodeTypeData.typeName")]
         public string nodeTypeRef;
         [Tooltip("节点备注: 仅供编辑器使用，不影响运行时逻辑")]
         public string comment;
@@ -137,7 +137,7 @@ namespace Ale.NodeTree.Runtime
             }
         }
 
-        /// <summary>判断此节点是否已完成，通过 StorySaveDataManager 查询存档状态。</summary>
+        /// <summary>判断此节点是否已完成，通过 NodeTreeSaveDataManager 查询存档状态。</summary>
         public bool IsFinish() => NodeTreeSaveDataManager.Instance.IsNodeFinished(nodeId);
         #endregion
     }

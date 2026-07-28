@@ -2,8 +2,8 @@ namespace Ale.NodeTree.Runtime
 {
     /// <summary>
     /// 内置条件检查器：检查目标节点是否已解锁。
-    /// conditionParam 为目标节点的 nodeId，由 StorySaveDataManager 维护解锁状态。
-    /// 在 StoryConditionManager 初始化时自动注册，conditionType = "NodeUnlocked"。
+    /// conditionParam 为目标节点的 nodeId，由 NodeTreeSaveDataManager 维护解锁状态。
+    /// 在 NodeConditionManager 初始化时自动注册，conditionType = "NodeUnlocked"。
     ///
     /// 比较方式语义：
     ///   Equal / Greater → 节点已解锁时返回 true
@@ -37,8 +37,8 @@ namespace Ale.NodeTree.Runtime
 
     /// <summary>
     /// 内置条件检查器：检查目标节点是否已完成。
-    /// conditionParam 为目标节点的 nodeId，由 StorySaveDataManager 维护完成状态。
-    /// 在 StoryConditionManager 初始化时自动注册，conditionType = "NodeFinished"。
+    /// conditionParam 为目标节点的 nodeId，由 NodeTreeSaveDataManager 维护完成状态。
+    /// 在 NodeConditionManager 初始化时自动注册，conditionType = "NodeFinished"。
     ///
     /// 比较方式语义：
     ///   Equal / Greater → 节点已完成时返回 true

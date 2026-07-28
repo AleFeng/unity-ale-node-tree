@@ -4,8 +4,8 @@ using UnityEngine;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事节点类型定义。描述某一类节点的外观、尺寸、UI预制体及连线样式。
-    /// 存储在 ConfigStoryTree.nodeTypes 列表中，节点实例通过 nodeTypeRef 引用。
+    /// 节点类型定义。描述某一类节点的外观、尺寸、UI预制体及连线样式。
+    /// 存储在 NodeTreeData.nodeTypes 列表中，节点实例通过 nodeTypeRef 引用。
     /// </summary>
     [Serializable]
     public class NodeTypeData
@@ -22,13 +22,13 @@ namespace Ale.NodeTree.Runtime
         public Sprite icon;
         [Tooltip("节点标签文字，显示在节点底部")]
         public string label;
-        [Tooltip("游戏内 UI 预制体，需挂载 UIStoryNodeBase")]
+        [Tooltip("游戏内 UI 预制体，需挂载 UINodeBase")]
         public GameObject uiPrefab;
         [Tooltip("从父节点连向此类型节点的默认连线样式")]
-        public StoryLineTypeData line = new StoryLineTypeData();
+        public LineTypeData line = new LineTypeData();
     }
     
-    /// <summary>故事节点的形状类型。</summary>
+    /// <summary>节点的形状类型。</summary>
     public enum ENodeShape
     {
         /// <summary>
@@ -73,9 +73,9 @@ namespace Ale.NodeTree.Runtime
         Star
     }
     
-    /// <summary>连线的外观样式配置，嵌套在 StoryNodeTypeData 中使用。</summary>
+    /// <summary>连线的外观样式配置，嵌套在 NodeTypeData 中使用。</summary>
     [Serializable]
-    public class StoryLineTypeData
+    public class LineTypeData
     {
         /// <summary>
         /// 线型配置：决定节点之间连线的形状（直线、曲线或折线），

@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事存档管理器（静态单例）。
+    /// 节点树存档管理器（静态单例）。
     /// 维护节点的已解锁/已完成状态，不继承 MonoBehaviour，不自动保存/加载。
     /// 外部游戏存档系统通过 GetSaveData/SetSaveData 读写数据，
     /// 并可使用 SerializeToJson/DeserializeFromJson 进行 JSON 序列化。
@@ -17,17 +17,17 @@ namespace Ale.NodeTree.Runtime
         public static NodeTreeSaveDataManager Instance => _instance ??= new NodeTreeSaveDataManager();
 
         /// <summary>
-        /// 故事存档数据结构（可序列化）。
+        /// 节点树存档数据结构（可序列化）。
         /// 供外部游戏存档系统通过 GetSaveData/SetSaveData 进行整体读写。
         /// </summary>
         [Serializable]
-        public class StorySaveData
+        public class NodeTreeSaveData
         {
             public List<string> unlockedNodeIds = new List<string>(); // 已解锁的节点ID列表
             public List<string> finishedNodeIds = new List<string>(); // 已完成的节点ID列表
         }
 
-        private StorySaveData _data = new StorySaveData(); // 当前运行时存档数据
+        private NodeTreeSaveData _data = new NodeTreeSaveData(); // 当前运行时存档数据
 
         // ── 状态查询 ──
 
@@ -73,10 +73,10 @@ namespace Ale.NodeTree.Runtime
         /// 返回当前存档数据的深拷贝，供外部游戏存档系统读取并持久化。
         /// 返回的是副本，修改不会影响内部状态。
         /// </summary>
-        public StorySaveData GetSaveData()
+        public NodeTreeSaveData GetSaveData()
         {
             // 返回深拷贝，防止外部直接修改内部状态
-            var copy = new StorySaveData();
+            var copy = new NodeTreeSaveData();
             copy.unlockedNodeIds.AddRange(_data.unlockedNodeIds);
             copy.finishedNodeIds.AddRange(_data.finishedNodeIds);
             return copy;
@@ -86,10 +86,10 @@ namespace Ale.NodeTree.Runtime
         /// 用外部传入的存档数据覆盖当前状态。通常在游戏加载存档时调用。
         /// data 为 null 时直接返回，不清空现有数据。
         /// </summary>
-        public void SetSaveData(StorySaveData data)
+        public void SetSaveData(NodeTreeSaveData data)
         {
             if (data == null) return;
-            _data = new StorySaveData();
+            _data = new NodeTreeSaveData();
             if (data.unlockedNodeIds != null)
                 _data.unlockedNodeIds.AddRange(data.unlockedNodeIds);
             if (data.finishedNodeIds != null)
@@ -108,14 +108,14 @@ namespace Ale.NodeTree.Runtime
         public void DeserializeFromJson(string json)
         {
             if (string.IsNullOrEmpty(json)) return;
-            var loaded = JsonUtility.FromJson<StorySaveData>(json);
+            var loaded = JsonUtility.FromJson<NodeTreeSaveData>(json);
             SetSaveData(loaded);
         }
 
         /// <summary>清空所有解锁/完成记录，重置为初始状态。</summary>
         public void Reset()
         {
-            _data = new StorySaveData();
+            _data = new NodeTreeSaveData();
         }
     }
 }

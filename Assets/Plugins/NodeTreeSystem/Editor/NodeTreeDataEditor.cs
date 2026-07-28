@@ -6,14 +6,14 @@ namespace Ale.NodeTree.Editor
 {
     /// <summary>
     /// NodeTreeData 的自定义 Inspector。
-    /// 在默认 Inspector 顶部添加一个快速打开 StoryTreeEditorWindow 的按钮，
+    /// 在默认 Inspector 顶部添加一个快速打开 NodeTreeEditorWindow 的按钮，
     /// 方便在 Project 窗口选中配置文件后直接进入可视化编辑器。
     /// </summary>
     [CustomEditor(typeof(NodeTreeData))]
     public class NodeTreeDataEditor : UnityEditor.Editor
     {
         /// <summary>
-        /// 绘制自定义 Inspector 面板：顶部显示"在 Story Tree Editor 中编辑"按钮，
+        /// 绘制自定义 Inspector 面板：顶部显示"在 Node Tree Editor 中编辑"按钮，
         /// 按钮下方绘制水平分割线，随后绘制默认 Inspector 字段。
         /// </summary>
         public override void OnInspectorGUI()
@@ -27,7 +27,7 @@ namespace Ale.NodeTree.Editor
                 fontStyle   = FontStyle.Bold,
                 fixedHeight = 32f
             };
-            if (GUILayout.Button("在 Story Tree Editor 中编辑", btnStyle))
+            if (GUILayout.Button("在 Node Tree Editor 中编辑", btnStyle))
                 NodeTreeEditorWindow.Open(config);
 
             EditorGUILayout.Space(6f);

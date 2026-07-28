@@ -17,7 +17,7 @@ namespace Ale.NodeTree.Runtime
     }
 
     /// <summary>
-    /// 条件比较方式。接口层仅定义语义，具体比较逻辑由各 IStoryConditionChecker 实现。
+    /// 条件比较方式。接口层仅定义语义，具体比较逻辑由各 INodeConditionChecker 实现。
     /// </summary>
     public enum EConditionComparison
     {
@@ -35,17 +35,17 @@ namespace Ale.NodeTree.Runtime
 
     /// <summary>
     /// 单条条件实例数据，存储在 ConditionGroupData.conditions 列表中。
-    /// conditionType 引用 StoryConditionTypeData.conditionType，
+    /// conditionType 引用 NodeConditionTypeData.conditionType，
     /// comparison 决定比较方式，conditionParam 为传给检查器的参数字符串。
     /// </summary>
     [Serializable]
     public class ConditionData
     {
-        /// <summary>条件类型标识符，引用 StoryConditionTypeData.conditionType。</summary>
+        /// <summary>条件类型标识符，引用 NodeConditionTypeData.conditionType。</summary>
         public string conditionType;
 
         /// <summary>
-        /// 比较方式，由实现 IStoryConditionChecker 的外部系统负责具体判断逻辑。
+        /// 比较方式，由实现 INodeConditionChecker 的外部系统负责具体判断逻辑。
         /// 默认为 Equal（等于）。
         /// </summary>
         public EConditionComparison comparison = EConditionComparison.Equal;

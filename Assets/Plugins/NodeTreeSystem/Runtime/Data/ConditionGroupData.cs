@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 条件组实例数据，存储在 StoryNodeData.conditionGroups 列表中。
+    /// 条件组实例数据，存储在 NodeData.conditionGroups 列表中。
     /// 每个条件组包含若干 ConditionData，组内条件以 satisfyType 指定的逻辑（AND/OR）进行组合。
-    /// 各条件组之间的关系由 StoryNodeData.conditionSatisfyType 统一决定。
+    /// 各条件组之间的关系由 NodeData.conditionSatisfyType 统一决定。
     /// </summary>
     [Serializable]
     public class ConditionGroupData

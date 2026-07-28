@@ -3,7 +3,7 @@ using UnityEngine;
 namespace Ale.NodeTree.Editor
 {
     /// <summary>
-    /// 故事树编辑器画布交互状态。
+    /// 节点树编辑器画布交互状态。
     /// 维护平移偏移、缩放比例、当前选中节点及拖拽状态，
     /// 并提供画布坐标与屏幕像素坐标之间的互转方法。
     ///

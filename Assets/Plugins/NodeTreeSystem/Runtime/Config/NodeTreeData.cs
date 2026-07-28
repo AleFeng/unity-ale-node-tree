@@ -4,14 +4,14 @@ using UnityEngine;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事树配置资产（ScriptableObject）。
+    /// 节点树配置资产（ScriptableObject）。
     /// 存储所有节点实例、节点类型定义、条件类型定义及全局布局设置。
-    /// 通过菜单 StoryTree System/Config Story Tree 创建。
+    /// 通过菜单 NodeTree System/Config Node Tree 创建。
     /// </summary>
-    [CreateAssetMenu(fileName = "ConfigStoryTree", menuName = "StoryTree System/Config Story Tree")]
+    [CreateAssetMenu(fileName = "ConfigNodeTree", menuName = "NodeTree System/Config Node Tree")]
     public class NodeTreeData : ScriptableObject
     {
-        [Header("故事节点")]
+        [Header("节点")]
         public List<NodeData> nodes = new List<NodeData>(); // 所有节点实例列表
 
         [Header("节点类型定义")]
@@ -53,8 +53,8 @@ namespace Ale.NodeTree.Runtime
             EnsureBuiltinNodeType("结局", ENodeShape.Hexagon, new Vector2(130f, 130f), new Color(0.6f, 0.9f, 0.3f));
 
             // 默认条件类型
-            EnsureBuiltinConditionType("NodeUnlocked", "节点已解锁（对应 StorySaveDataManager.IsNodeUnlocked）");
-            EnsureBuiltinConditionType("NodeFinished", "节点已完成（对应 StorySaveDataManager.IsNodeFinished）");
+            EnsureBuiltinConditionType("NodeUnlocked", "节点已解锁（对应 NodeTreeSaveDataManager.IsNodeUnlocked）");
+            EnsureBuiltinConditionType("NodeFinished", "节点已完成（对应 NodeTreeSaveDataManager.IsNodeFinished）");
 
             // 默认开始节点（仅在 nodes 为空时添加）
             EnsureStartNode();
@@ -71,7 +71,7 @@ namespace Ale.NodeTree.Runtime
             {
                 nodeId      = "开始节点",
                 nodeTypeRef = "普通",
-                comment = "这是故事的开始节点。请从这里开始构建你的故事树！",
+                comment = "这是起始节点。请从这里开始构建你的节点树！",
                 position    = Vector2.zero
             });
         }
@@ -90,7 +90,7 @@ namespace Ale.NodeTree.Runtime
                 shape      = shape,
                 resolution = resolution,
                 color      = color,
-                line       = new StoryLineTypeData()
+                line       = new LineTypeData()
             });
         }
 
@@ -134,7 +134,7 @@ namespace Ale.NodeTree.Runtime
         }
     }
     
-    /// <summary>故事树的整体布局方向，决定父子节点的排列轴向。</summary>
+    /// <summary>节点树的整体布局方向，决定父子节点的排列轴向。</summary>
     public enum ELayoutDirection
     {
         /// <summary>

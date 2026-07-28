@@ -15,7 +15,7 @@ using DG.Tweening;
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
-    /// 故事节点UI基类（MonoBehaviour + IPoolable）。
+    /// 节点UI基类（MonoBehaviour + IPoolable）。
     /// 通过 ToolkitPool 管理生命周期，子类重写各虚方法实现具体UI逻辑。
     /// 功能：节点图标显示 / 本地化文本绑定（需 HAS_LOCALIZATION）/
     ///        鼠标悬停弹窗淡入淡出（需 DOTWEEN）/ 鼠标点击回调。
@@ -25,35 +25,36 @@ namespace Ale.NodeTree.Runtime
     {
         #region 基础设置
         [Header("节点图标")]
-        [Tooltip("显示节点图标的 Image 组件，绑定时自动将 Sprite 设置为 StoryNodeData.uiIcon。")]
+        [Tooltip("显示节点图标的 Image 组件，绑定时自动将 Sprite 设置为 NodeData.uiIcon。")]
         [SerializeField] protected Image iconImage;
 
 #if HAS_LOCALIZATION
         [Header("本地化文本 (需 HAS_LOCALIZATION)")]
-        [Tooltip("节点名称的 LocalizeStringEvent 组件，绑定时自动关联 StoryNodeData.localizeNodeName。")]
+        [Tooltip("节点名称的 LocalizeStringEvent 组件，绑定时自动关联 NodeData.localizeNodeName。")]
         [SerializeField] protected LocalizeStringEvent nodeNameEvent;
-        [Tooltip("节点描述的 LocalizeStringEvent 组件，绑定时自动关联 StoryNodeData.localizeNodeDesc。")]
+        [Tooltip("节点描述的 LocalizeStringEvent 组件，绑定时自动关联 NodeData.localizeNodeDesc。")]
         [SerializeField] protected LocalizeStringEvent nodeDescEvent;
 #endif
-        
+
         /// <summary>当前绑定的节点实例数据，未绑定时为 null。</summary>
-        public NodeData NodeData { get; private set; }
+        public NodeData nodeData;
         /// <summary>当前绑定的节点类型定义，未绑定时为 null。</summary>
-        public NodeTypeData NodeType { get; private set; }
+        public NodeTypeData nodeType;
         
         /// <summary>
-        /// 绑定节点数据，由 UIStoryTreeWindow 在生成节点UI时调用。
+        /// 绑定节点数据，由 UINodeTreeWindow 在生成节点UI时调用。
         /// 自动完成：节点图标赋值、本地化文本关联（需 HAS_LOCALIZATION）、弹窗初始化为隐藏状态。
         /// 子类可重写以执行额外初始化（如状态色块、完成标记、解锁动画等）。
         /// </summary>
         public virtual void OnBindData(NodeData data, NodeTypeData type)
         {
-            NodeData = data;
-            NodeType = type;
+            // 绑定节点数据和类型
+            nodeData = data;
+            nodeType = type;
 
             if (data != null)
             {
-                // 节点图标：将 Image.sprite 设置为 StoryNodeData.uiIcon
+                // 节点图标：将 Image.sprite 设置为 NodeData.uiIcon
                 if (iconImage && data.uiIcon)
                 {
                     iconImage.enabled = true;
@@ -86,8 +87,8 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         public virtual void OnUnbindData()
         {
-            NodeData = null;
-            NodeType = null;
+            nodeData = null;
+            nodeType = null;
 
 #if DOTWEEN
             // 归还对象池前强制停止弹窗动画，避免对象复用时残留动画状态
