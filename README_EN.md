@@ -105,6 +105,9 @@ You can also download the repo and copy the whole `Packages/com.ale.nodetree` fo
 
 After installation, the menu **`Tools > NodeTree > Node Tree Editor`** appears.
 
+### Import the demo Sample (optional)
+Once installed, in `Window > Package Manager` select this package → `Samples` → import **Node Tree Demo** (config asset `NodeTreeData` + runtime UI sample scene + node prefabs + line material + localization tables); enter Play to try it out.
+
 ## 🚀 Quick Start
 The shortest path below; **see the [documentation](#-documentation) for full module and API details**.
 
@@ -148,7 +151,7 @@ save.DeserializeFromJson(json);          // overwrite on load
 ```
 
 **5. Try the Demo**
-The repo ships a demo scene under `Assets/Demo/` (config asset + runtime UI); enter Play to see pooled node spawning and flowing connections.
+In Package Manager, select this package → `Samples` → import **Node Tree Demo**, open the demo scene and enter Play to see pooled node spawning and flowing connections.
 
 ## 📖 Documentation
 This README is an overview and quick start. For **each module's fields, API, usage, and code samples**, see the in-package documentation:
@@ -167,9 +170,8 @@ Packages/com.ale.nodetree/           ← package root
 │   ├── UI/          runtime UI (UINodeTreeWindow / UINodeBase)
 │   └── Utility/     line mesh builder NodeLineBuilder
 ├── Editor/          visual editor (NodeTreeEditorWindow / NodeDrawer / NodeTreeCanvasState / NodeTreeDataEditor)
-└── Shaders/         URP flowing-line shader (NodeTree/NodeLineFlow)
-
-Assets/Demo/                         ← demo scene & data (references package scripts by GUID)
+├── Shaders/         URP flowing-line shader (NodeTree/NodeLineFlow)
+└── Samples~/Demo/   demo Sample (scene + config asset + node prefabs + line material + localization tables; import via Package Manager)
 ```
 
 ## 📋 To-Do

@@ -18,5 +18,12 @@
     "name": "Able Games",
     "url": "https://github.com/AleFeng/unity-ale-node-tree"
   },
-  "category": "Gameplay"
+  "category": "Gameplay",
+  "samples": [
+    {
+      "displayName": "Node Tree Demo",
+      "description": "节点树演示：配置资产（NodeTreeData）、运行时 UI 示例场景、节点预制体、连线材质与本地化表。",
+      "path": "Samples~/Demo"
+    }
+  ]
 }

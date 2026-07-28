@@ -105,6 +105,9 @@ https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetr
 
 インストール後、メニューに **`Tools > NodeTree > Node Tree Editor`** が現れます。
 
+### デモ Sample のインポート（任意）
+導入後、`Window > Package Manager` で本パッケージを選択 → `Samples` → **Node Tree Demo**（設定アセット `NodeTreeData` + ランタイム UI サンプルシーン + ノードプレハブ + ラインマテリアル + ローカライズテーブル）をインポート。Play に入ってそのまま試せます。
+
 ## 🚀 クイックスタート
 最短の流れは以下のとおりです。**モジュールと API の詳細は[ドキュメント](#-ドキュメント)を参照してください。**
 
@@ -148,7 +151,7 @@ save.DeserializeFromJson(json);          // ロード時に上書き
 ```
 
 **5. Demo を試す**
-リポジトリは `Assets/Demo/` にデモシーン（設定アセット + ランタイム UI）を同梱しています。Play に入るとノードのプール生成と流光接続を確認できます。
+Package Manager で本パッケージを選択 → `Samples` → **Node Tree Demo** をインポートし、デモシーンを開いて Play に入ると、ノードのプール生成と流光接続を確認できます。
 
 ## 📖 ドキュメント
 本 README は概要とクイックスタート向けです。**各モジュールのフィールド・API・使い方・コード例**はパッケージ内ドキュメントを参照してください：
@@ -167,9 +170,8 @@ Packages/com.ale.nodetree/           ← パッケージルート
 │   ├── UI/          ランタイム UI（UINodeTreeWindow / UINodeBase）
 │   └── Utility/     ライン Mesh 構築 NodeLineBuilder
 ├── Editor/          ビジュアルエディタ（NodeTreeEditorWindow / NodeDrawer / NodeTreeCanvasState / NodeTreeDataEditor）
-└── Shaders/         URP 流光ラインシェーダー（NodeTree/NodeLineFlow）
-
-Assets/Demo/                         ← デモシーンとデータ（パッケージ内スクリプトを GUID で参照）
+├── Shaders/         URP 流光ラインシェーダー（NodeTree/NodeLineFlow）
+└── Samples~/Demo/   デモ Sample（シーン + 設定アセット + ノードプレハブ + ラインマテリアル + ローカライズテーブル；Package Manager からインポート）
 ```
 
 ## 📋 TODO

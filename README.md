@@ -105,6 +105,9 @@ https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetr
 
 安装成功后，菜单栏会出现 **`Tools > NodeTree > Node Tree Editor`**。
 
+### 导入演示 Sample（可选）
+装好后在 `Window > Package Manager` 里选中本包 → `Samples` → 导入 **Node Tree Demo**（配置资产 `NodeTreeData` + 运行时 UI 示例场景 + 节点预制体 + 连线材质 + 本地化表），可直接进 Play 体验。
+
 ## 🚀 快速开始
 下面是最短路径的使用流程，**完整的模块说明与 API 见 [详细文档](#-详细文档)**。
 
@@ -148,7 +151,7 @@ save.DeserializeFromJson(json);          // 读档时覆盖
 ```
 
 **5. 体验 Demo**
-仓库在 `Assets/Demo/` 提供了一个演示场景（配置资产 + 运行时 UI），可直接进 Play 查看节点树的对象池化生成与流光连线。
+在 Package Manager 选中本包 → `Samples` → 导入 **Node Tree Demo**，打开演示场景直接进 Play，即可查看节点树的对象池化生成与流光连线。
 
 ## 📖 详细文档
 本 README 面向整体介绍与快速上手。**每个模块的字段、API、用法与代码示例**请见插件内文档：
@@ -167,9 +170,8 @@ Packages/com.ale.nodetree/           ← 包根
 │   ├── UI/          运行时 UI（UINodeTreeWindow / UINodeBase）
 │   └── Utility/     连线 Mesh 构建 NodeLineBuilder
 ├── Editor/          可视化编辑器（NodeTreeEditorWindow / NodeDrawer / NodeTreeCanvasState / NodeTreeDataEditor）
-└── Shaders/         URP 流光连线 Shader（NodeTree/NodeLineFlow）
-
-Assets/Demo/                         ← 演示场景与数据（按 GUID 引用包内脚本）
+├── Shaders/         URP 流光连线 Shader（NodeTree/NodeLineFlow）
+└── Samples~/Demo/   演示 Sample（场景 + 配置资产 + 节点预制体 + 连线材质 + 本地化表；Package Manager 一键导入）
 ```
 
 ## 📋 待办事项
