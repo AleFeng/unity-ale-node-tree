@@ -2,7 +2,8 @@
     "name": "StoryTreeSystem.Runtime",
     "rootNamespace": "",
     "references": [
-        "Unity.Localization"
+        "Unity.Localization",
+        "Ale.Toolkit.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

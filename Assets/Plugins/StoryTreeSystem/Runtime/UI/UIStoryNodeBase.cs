@@ -1,5 +1,5 @@
 using System;
-using Lean.Pool;
+using Ale.Toolkit.Runtime;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -16,7 +16,7 @@ namespace StoryTreeSystem
 {
     /// <summary>
     /// 故事节点UI基类（MonoBehaviour + IPoolable）。
-    /// 通过 LeanPool 管理生命周期，子类重写各虚方法实现具体UI逻辑。
+    /// 通过 ToolkitPool 管理生命周期，子类重写各虚方法实现具体UI逻辑。
     /// 功能：节点图标显示 / 本地化文本绑定（需 HAS_LOCALIZATION）/
     ///        鼠标悬停弹窗淡入淡出（需 DOTWEEN）/ 鼠标点击回调。
     /// </summary>
@@ -240,9 +240,9 @@ namespace StoryTreeSystem
         #endregion
 
         #region 对象池
-        /// <summary>对象从池中取出时调用（LeanPool 回调），当前无需额外初始化。</summary>
+        /// <summary>对象从池中取出时调用（ToolkitPool 回调），当前无需额外初始化。</summary>
         public void OnSpawn() { }
-        /// <summary>对象归还到池中时调用（LeanPool 回调），自动执行解绑并重置状态。</summary>
+        /// <summary>对象归还到池中时调用（ToolkitPool 回调），自动执行解绑并重置状态。</summary>
         public void OnDespawn() => OnUnbindData();
         #endregion
     }

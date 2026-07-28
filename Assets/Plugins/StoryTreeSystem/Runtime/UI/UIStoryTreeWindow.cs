@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Lean.Pool;
+using Ale.Toolkit.Runtime;
 using UnityEngine;
 
 namespace StoryTreeSystem
@@ -8,7 +8,7 @@ namespace StoryTreeSystem
     /// 游戏运行时故事树UI主窗口（独立 MonoBehaviour）。
     /// 负责：
     ///  - 根据所有节点的位置和尺寸自动计算并设置 storyNodeTreeRoot 的 Size；
-    ///  - 按节点类型为节点UI维护 LeanGameObjectPool 对象池；
+    ///  - 按节点类型为节点UI维护 ToolkitGameObjectPool 对象池；
     ///  - 通过视口裁剪按需 Spawn/Despawn 节点UI；
     ///  - 为每种节点类型合并生成连线 Mesh（减少 DrawCall），
     ///    UV.x 用于边缘渐变，UV.y 用于流动效果（配合 StoryLineFlow.shader）；
@@ -339,11 +339,11 @@ namespace StoryTreeSystem
         
         #region 故事节点
         // 对象池：key = typeName
-        private readonly Dictionary<string, LeanGameObjectPool> _pools
-            = new Dictionary<string, LeanGameObjectPool>();
+        private readonly Dictionary<string, ToolkitGameObjectPool> _pools
+            = new Dictionary<string, ToolkitGameObjectPool>();
 
         /// <summary>
-        /// 根据配置中的节点类型定义初始化各类型的 LeanGameObjectPool。
+        /// 根据配置中的节点类型定义初始化各类型的 ToolkitGameObjectPool。
         /// 同时清理已存在的激活节点。
         /// </summary>
         private void InitPools()
@@ -360,9 +360,9 @@ namespace StoryTreeSystem
 
                 var poolGo = new GameObject($"Pool_{nodeType.typeName}");
                 poolGo.transform.SetParent(transform);
-                var pool = poolGo.AddComponent<LeanGameObjectPool>();
+                var pool = poolGo.AddComponent<ToolkitGameObjectPool>();
                 pool.Prefab        = nodeType.uiPrefab;
-                pool.Notification  = LeanGameObjectPool.NotificationType.IPoolable;
+                pool.Notification  = ToolkitGameObjectPool.PoolNotificationType.IPoolable;
                 pool.Preload       = 3;
                 _pools[nodeType.typeName] = pool;
             }
@@ -406,7 +406,7 @@ namespace StoryTreeSystem
         private void DespawnNode(string nodeId)
         {
             if (!_activeNodes.TryGetValue(nodeId, out var nodeUI)) return;
-            LeanPool.Despawn(nodeUI.gameObject);
+            ToolkitPool.Despawn(nodeUI.gameObject);
             _activeNodes.Remove(nodeId);
         }
         #endregion
