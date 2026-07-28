@@ -1,0 +1,378 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 667b0436d530a3346a3ba598ff240540, type: 3}
+  m_Name: NodeTreeData
+  m_EditorClassIdentifier: 
+  nodes:
+  - nodeId: "\u5F00\u59CB\u8282\u70B9"
+    nodeTypeRef: "\u666E\u901A"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups: []
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 0, y: 0}
+    customDataList: []
+    childNodeIds:
+    - "\u5F00\u59CB\u8282\u70B9_0"
+    - "\u5F00\u59CB\u8282\u70B9_1"
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_0"
+    nodeTypeRef: "\u666E\u901A"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 260, y: -220}
+    customDataList: []
+    childNodeIds:
+    - "\u5F00\u59CB\u8282\u70B9_0_0"
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_1"
+    nodeTypeRef: "\u666E\u901A"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 260, y: 220}
+    customDataList: []
+    childNodeIds:
+    - "\u5F00\u59CB\u8282\u70B9_1_0"
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0"
+    nodeTypeRef: "\u666E\u901A"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_0"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 520, y: -220}
+    customDataList: []
+    childNodeIds:
+    - "\u5F00\u59CB\u8282\u70B9_0_0_0"
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0"
+    nodeTypeRef: "\u666E\u901A"
+    comment: 
+    conditionSatisfyType: 1
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0"
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 780, y: 0}
+    customDataList: []
+    childNodeIds:
+    - "\u5F00\u59CB\u8282\u70B9_0_0_0_0"
+    - "\u5F00\u59CB\u8282\u70B9_0_0_0_1"
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0_0"
+    nodeTypeRef: "\u7ED3\u5C40"
+    comment: 
+    conditionSatisfyType: 1
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0_0"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 1040, y: -220}
+    customDataList: []
+    childNodeIds: []
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0_1"
+    nodeTypeRef: "\u7ED3\u5C40"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0_0"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 1040, y: 0}
+    customDataList: []
+    childNodeIds: []
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0"
+    nodeTypeRef: "\u666E\u901A"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_1"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 520, y: 220}
+    customDataList: []
+    childNodeIds:
+    - "\u5F00\u59CB\u8282\u70B9_1_0_0"
+    - "\u5F00\u59CB\u8282\u70B9_1_0_1"
+    - "\u5F00\u59CB\u8282\u70B9_0_0_0"
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0_0"
+    nodeTypeRef: "\u7ED3\u5C40"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 1040, y: 220}
+    customDataList: []
+    childNodeIds: []
+  - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0_1"
+    nodeTypeRef: "\u7ED3\u5C40"
+    comment: 
+    conditionSatisfyType: 0
+    conditionGroups:
+    - satisfyType: 0
+      conditions:
+      - conditionType: NodeFinished
+        comparison: 0
+        conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
+    uiIcon: {fileID: 0}
+    localizeNodeName:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 45888716800
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    localizeNodeDesc:
+      m_TableReference:
+        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
+      m_TableEntryReference:
+        m_KeyId: 108614533120
+        m_Key: 
+      m_FallbackState: 0
+      m_WaitForCompletion: 0
+      m_LocalVariables: []
+    position: {x: 1040, y: 460}
+    customDataList: []
+    childNodeIds: []
+  nodeTypes:
+  - typeName: "\u666E\u901A"
+    resolution: {x: 100, y: 100}
+    shape: 0
+    color: {r: 0.6, g: 0.8, b: 0.8, a: 1}
+    icon: {fileID: 0}
+    label: 
+    uiPrefab: {fileID: 3302229447382449384, guid: b9f3510e6e18ff942938b035cb41ca1d, type: 3}
+    line:
+      lineType: 2
+      lineWidth: 10
+      material: {fileID: 2100000, guid: 2af307e97fc88ba4fba18e05d1dde40c, type: 2}
+  - typeName: "\u7ED3\u5C40"
+    resolution: {x: 130, y: 130}
+    shape: 7
+    color: {r: 0.6, g: 0.9, b: 0.3, a: 1}
+    icon: {fileID: 0}
+    label: 
+    uiPrefab: {fileID: 3302229447382449384, guid: b98ce66b91189cf43992ca2cc69d06a8, type: 3}
+    line:
+      lineType: 0
+      lineWidth: 10
+      material: {fileID: 2100000, guid: 2af307e97fc88ba4fba18e05d1dde40c, type: 2}
+  conditionTypes:
+  - conditionType: NodeUnlocked
+    description: "\u8282\u70B9\u5DF2\u89E3\u9501\uFF08\u5BF9\u5E94 StorySaveDataManager.IsNodeUnlocked\uFF09"
+  - conditionType: NodeFinished
+    description: "\u8282\u70B9\u5DF2\u5B8C\u6210\uFF08\u5BF9\u5E94 StorySaveDataManager.IsNodeFinished\uFF09"
+  layoutDirection: 0
+  zoom: 1
+  references:
+    version: 2
+    RefIds: []
