@@ -1,0 +1,157 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace StoryTreeSystem
+{
+    /// <summary>
+    /// 故事树配置资产（ScriptableObject）。
+    /// 存储所有节点实例、节点类型定义、条件类型定义及全局布局设置。
+    /// 通过菜单 StoryTree System/Config Story Tree 创建。
+    /// </summary>
+    [CreateAssetMenu(fileName = "ConfigStoryTree", menuName = "StoryTree System/Config Story Tree")]
+    public class ConfigStoryTree : ScriptableObject
+    {
+        [Header("故事节点")]
+        public List<StoryNodeData> nodes = new List<StoryNodeData>(); // 所有节点实例列表
+
+        [Header("节点类型定义")]
+        public List<StoryNodeTypeData> nodeTypes = new List<StoryNodeTypeData>(); // 节点类型定义，决定外观与 UI 预制体
+
+        [Header("条件类型定义")]
+        public List<StoryConditionTypeData> conditionTypes = new List<StoryConditionTypeData>(); // 可用的条件类型元数据列表
+
+        [Header("布局设置")]
+        public ELayoutDirection layoutDirection = ELayoutDirection.Left2Right; // 编辑器画布的整体布局方向
+        public float zoom = 1.0f;                                              // 编辑器画布的当前缩放比例（由编辑器写入，运行时不使用）
+
+        /// <summary>通过 nodeId 查找节点实例，未找到返回 null。</summary>
+        public StoryNodeData GetNode(string nodeId)
+        {
+            foreach (var node in nodes)
+                if (node.nodeId == nodeId) return node;
+            return null;
+        }
+
+        /// <summary>通过 typeName 查找节点类型定义，未找到返回 null。</summary>
+        public StoryNodeTypeData GetNodeType(string typeName)
+        {
+            foreach (var type in nodeTypes)
+                if (type.typeName == typeName) return type;
+            return null;
+        }
+
+        /// <summary>
+        /// 新建资产时自动填充内置节点类型（普通 / 结局）、内置条件类型（NodeUnlocked / NodeFinished）
+        /// 以及一个默认的开始节点。
+        /// Unity 在通过 CreateAssetMenu 创建资产以及 Inspector Reset 时均会调用此方法。
+        /// 所有 Ensure* 辅助方法均保证幂等，不会重复添加已存在的条目。
+        /// </summary>
+        private void Reset()
+        {
+            // 默认节点类型
+            EnsureBuiltinNodeType("普通", ENodeShape.Circle, new Vector2(100f, 100f), new Color(0.6f, 0.8f, 0.8f));
+            EnsureBuiltinNodeType("结局", ENodeShape.Hexagon, new Vector2(130f, 130f), new Color(0.6f, 0.9f, 0.3f));
+
+            // 默认条件类型
+            EnsureBuiltinConditionType("NodeUnlocked", "节点已解锁（对应 StorySaveDataManager.IsNodeUnlocked）");
+            EnsureBuiltinConditionType("NodeFinished", "节点已完成（对应 StorySaveDataManager.IsNodeFinished）");
+
+            // 默认开始节点（仅在 nodes 为空时添加）
+            EnsureStartNode();
+        }
+
+        /// <summary>
+        /// 若 nodes 列表为空，则自动添加一个"开始"节点（nodeTypeRef = "普通"，位于画布原点）。
+        /// nodes 已有内容时直接返回，不做任何修改（保证幂等）。
+        /// </summary>
+        private void EnsureStartNode()
+        {
+            if (nodes.Count > 0) return;
+            nodes.Add(new StoryNodeData
+            {
+                nodeId      = "开始节点",
+                nodeTypeRef = "普通",
+                comment = "这是故事的开始节点。请从这里开始构建你的故事树！",
+                position    = Vector2.zero
+            });
+        }
+
+        /// <summary>
+        /// 若 nodeTypes 列表中不存在指定 typeName，则追加一条默认节点类型记录。
+        /// 已存在时直接返回，不做任何修改（保证幂等）。
+        /// </summary>
+        private void EnsureBuiltinNodeType(string typeName, ENodeShape shape, Vector2 resolution, Color color)
+        {
+            foreach (var nt in nodeTypes)
+                if (nt.typeName == typeName) return;
+            nodeTypes.Add(new StoryNodeTypeData
+            {
+                typeName   = typeName,
+                shape      = shape,
+                resolution = resolution,
+                color      = color,
+                line       = new StoryLineTypeData()
+            });
+        }
+
+        /// <summary>
+        /// 若 conditionTypes 列表中不存在指定 conditionType，则追加一条新记录。
+        /// 已存在时直接返回，不做任何修改（保证幂等）。
+        /// </summary>
+        private void EnsureBuiltinConditionType(string conditionType, string description)
+        {
+            foreach (var ct in conditionTypes)
+                if (ct.conditionType == conditionType) return;
+            conditionTypes.Add(new StoryConditionTypeData
+            {
+                conditionType = conditionType,
+                description   = description
+            });
+        }
+
+        /// <summary>返回所有根节点（不被任何其他节点的 childNodeIds 引用的节点）。</summary>
+        public List<StoryNodeData> GetRootNodes()
+        {
+            var childSet = new HashSet<string>();
+            foreach (var node in nodes)
+                foreach (var childId in node.childNodeIds)
+                    childSet.Add(childId);
+
+            var roots = new List<StoryNodeData>();
+            foreach (var node in nodes)
+                if (!childSet.Contains(node.nodeId))
+                    roots.Add(node);
+            return roots;
+        }
+
+        /// <summary>返回指定节点的父节点 ID，若为根节点则返回 null。</summary>
+        public string GetParentId(string nodeId)
+        {
+            foreach (var node in nodes)
+                if (node.childNodeIds.Contains(nodeId))
+                    return node.nodeId;
+            return null;
+        }
+    }
+    
+    /// <summary>故事树的整体布局方向，决定父子节点的排列轴向。</summary>
+    public enum ELayoutDirection
+    {
+        /// <summary>
+        /// 从左向右展开（父节点在左，子节点在右）
+        /// </summary>
+        Left2Right,
+        /// <summary>
+        /// 从右向左展开（父节点在右，子节点在左）
+        /// </summary>
+        Right2Left,
+        /// <summary>
+        /// 从上向下展开（父节点在上，子节点在下）
+        /// </summary>
+        Top2Bottom,
+        /// <summary>
+        /// 从下向上展开（父节点在下，子节点在上）
+        /// </summary>
+        Bottom2Top
+    }
+}
