@@ -17,6 +17,14 @@ namespace Ale.NodeTree.Runtime
         public static NodeTreeSaveDataManager Instance => _instance ??= new NodeTreeSaveDataManager();
 
         /// <summary>
+        /// 关闭 Domain Reload（Enter Play Mode Options → 取消 Reload Domain）时，静态 _instance
+        /// 会跨播放会话残留，使上一次运行的已解锁/已完成状态带入下一次运行。进入 Play 时置空，
+        /// 保证每次运行都从干净状态开始（下次访问 Instance 会重建）。
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => _instance = null;
+
+        /// <summary>
         /// 节点树存档数据结构（可序列化）。
         /// 供外部游戏存档系统通过 GetSaveData/SetSaveData 进行整体读写。
         /// </summary>

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Ale.NodeTree.Runtime
 {
@@ -12,6 +13,14 @@ namespace Ale.NodeTree.Runtime
         private static NodeConditionManager _instance; // 单例实例
         /// <summary>获取全局单例，首次访问时自动创建并注册内置检查器。</summary>
         public static NodeConditionManager Instance => _instance ??= new NodeConditionManager();
+
+        /// <summary>
+        /// 关闭 Domain Reload（Enter Play Mode Options → 取消 Reload Domain）时，静态 _instance
+        /// 会跨播放会话残留，使上一次运行注册的自定义检查器带入下一次运行。进入 Play 时置空，
+        /// 下次访问 Instance 会重建并仅注册内置检查器（NodeUnlockedChecker / NodeFinishedChecker）。
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => _instance = null;
 
         // 已注册的检查器字典，key = INodeConditionChecker.ConditionType
         private readonly Dictionary<string, INodeConditionChecker> _checkers
