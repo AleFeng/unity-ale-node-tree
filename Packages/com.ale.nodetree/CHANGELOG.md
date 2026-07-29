@@ -13,7 +13,7 @@
 ### 新增
 
 - **配置资产 `NodeTreeData`**（ScriptableObject）：集中承载节点实例、节点类型、条件类型与画布布局；`Assets > Create > NodeTree System/Config Node Tree` 创建，新建自动填充内置节点类型（普通 / 结局）、内置条件类型（NodeUnlocked / NodeFinished）与起始节点。
-- **数据模型**：`NodeData`（ID / 类型引用 / 位置 / 子节点 / 条件组 / 自定义键值）、`NodeTypeData`（形状 `ENodeShape` / 尺寸 / 颜色 / 图标 / UI 预制体 / 连线样式 `LineTypeData`：`ELineType` 直线-曲线-折线 + 线宽 + 材质）、条件数据 `ConditionData` / `ConditionGroupData`（`EConditionSatisfyType` All/Any、`EConditionComparison`）、`NodeConditionTypeData`、`NodeCustomData`。
+- **数据模型**：`NodeData`（ID / 类型引用 / 位置 / 子节点 / 条件组 / 自定义属性值 `AttributeEntry`，继承 `com.ale.toolkit` 的 `AttributeOwner`）、`NodeTypeData`（形状 `ENodeShape` / 尺寸 / 颜色 / 图标 / UI 预制体 / 连线样式 `LineTypeData`：`ELineType` 直线-曲线-折线 + 线宽 + 材质 / 自定义属性字段 `AttributeDefinition` schema）、条件数据 `ConditionData` / `ConditionGroupData`（`EConditionSatisfyType` All/Any、`EConditionComparison`）、`NodeConditionTypeData`。
 - **条件系统**：`INodeConditionChecker` + 静态 `NodeConditionManager`（注册 / 注销 / 按 `conditionType` 路由检查），内置 `NodeUnlockedChecker` / `NodeFinishedChecker`，支持外部注册自定义解锁条件。
 - **存档管理器 `NodeTreeSaveDataManager`**（静态单例）：维护节点已解锁 / 已完成状态，`GetSaveData` / `SetSaveData` + JSON 序列化，供外部存档系统接入（不自动保存）；数据结构 `NodeTreeSaveData`。
 - **运行时 UI**：`UINodeTreeWindow`（按节点位置自动计算根容器尺寸、按节点类型维护对象池、视口裁剪按需 Spawn/Despawn、合批生成连线 Mesh 降 DrawCall、`InitTree` 初始化）、`UINodeBase`（`IPoolable` 节点 UI 基类，`OnBindData` 绑定 + 图标 / 本地化文本 / 悬停弹窗 / 点击回调）、连线 Mesh 构建工具 `NodeLineBuilder`（直线 / 贝塞尔曲线 / 折线）。

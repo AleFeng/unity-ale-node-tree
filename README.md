@@ -67,7 +67,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | 模块 | 职责 | 主要类型 |
 | --- | --- | --- |
 | **配置** | 节点树配置资产 | `NodeTreeData` |
-| **数据** | 节点 / 类型 / 条件 / 自定义数据 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData`、`NodeCustomData` |
+| **数据** | 节点 / 类型 / 条件 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData` |
 | **条件** | 解锁判定与扩展 | `INodeConditionChecker`、`NodeConditionManager` |
 | **存档** | 已解锁 / 已完成状态 | `NodeTreeSaveDataManager` |
 | **运行时 UI** | 节点树展示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
@@ -118,7 +118,7 @@ Project 面板右键 > Create > NodeTree System/Config Node Tree
 新建的 `NodeTreeData` 会自动带上内置节点类型（普通 / 结局）、内置条件类型（NodeUnlocked / NodeFinished）与一个起始节点。
 
 **2. 可视化编辑**
-选中该 `.asset`，在 Inspector 顶部点「在 Node Tree Editor 中编辑」，或菜单 `Tools > NodeTree > Node Tree Editor`。在左侧管理**节点类型**（形状 / 颜色 / 尺寸 / UI 预制体 / 连线样式）与**条件类型**；在中央画布拖拽节点、连线构建父子关系；在右侧属性面板为节点配置 ID、图标、解锁条件组与自定义数据。
+选中该 `.asset`，在 Inspector 顶部点「在 Node Tree Editor 中编辑」，或菜单 `Tools > NodeTree > Node Tree Editor`。在左侧管理**节点类型**（形状 / 颜色 / 尺寸 / UI 预制体 / 连线样式）与**条件类型**；在中央画布拖拽节点、连线构建父子关系；在右侧属性面板为节点配置 ID、图标、解锁条件组与自定义属性（字段 schema 在节点类型上定义）。
 
 **3. 运行时挂载**
 给 UI 根节点添加 `UINodeTreeWindow` 组件，把 `NodeTreeData` 拖到 `config`、指定内容根容器，运行时调用 `InitTree()` 即按节点数据生成对象池化的节点 UI 与合批连线。
@@ -164,7 +164,7 @@ Packages/com.ale.nodetree/           ← 包根
 ├── package.json  CHANGELOG.md  LICENSE.md  README.md   ← 详细使用文档（三语）
 ├── Runtime/
 │   ├── Config/      节点树配置资产 NodeTreeData
-│   ├── Data/        数据模型（NodeData / NodeTypeData / LineTypeData / Condition* / NodeCustomData）
+│   ├── Data/        数据模型（NodeData / NodeTypeData / LineTypeData / Condition*）
 │   ├── Conditions/  条件系统（INodeConditionChecker / NodeConditionManager / 内置检查器）
 │   ├── Save/        存档管理器 NodeTreeSaveDataManager
 │   ├── UI/          运行时 UI（UINodeTreeWindow / UINodeBase）

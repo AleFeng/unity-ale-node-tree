@@ -22,7 +22,7 @@
 | 模块 | 职责 | 主要类型 |
 |------|------|---------|
 | **配置** | 节点树配置资产 | `NodeTreeData` |
-| **数据** | 节点 / 类型 / 条件 / 自定义数据 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData`、`NodeCustomData` |
+| **数据** | 节点 / 类型 / 条件 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData` |
 | **条件** | 解锁条件判定与扩展 | `INodeConditionChecker`、`NodeConditionManager` |
 | **存档** | 已解锁 / 已完成状态 | `NodeTreeSaveDataManager` |
 | **运行时 UI** | 节点树展示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
@@ -65,18 +65,19 @@
 | `uiIcon` | 节点图标（`Sprite`） |
 | `nodeName` / `nodeDesc` | 节点名称 / 描述（`com.ale.toolkit` 的 `AttributeValue`(Text)：纯文本 + 可选本地化引用；`ResolveText()` 优先取本地化、回退纯文本） |
 | `position` | 画布像素坐标 |
-| `customDataList` | `List<NodeCustomData>`，任意键值对，供其他系统挂载扩展数据 |
+| `attributeValues` | `List<AttributeEntry>`（`com.ale.toolkit`），自定义属性值；字段 schema 由所属 `NodeTypeData.attributes` 定义 |
 | `childNodeIds` | 子节点 ID 列表（构成树 / 图结构） |
 
-**主要 API**：
+**主要 API**（`NodeData` 继承 `com.ale.toolkit` 的 `AttributeOwner`）：
 
-- `string GetCustomData(string key)` / `void SetCustomData(string key, string value)` —— 读写自定义数据。
+- `T GetAttributeValue<T>(string id, T fallback = default)` / `bool SetAttributeValue<T>(string id, T value)` / `AttributeEntry GetEntry(string id)` —— O(1) 读写自定义属性值。
+- `void RebuildAttributes(NodeTreeData config)` —— 按所属节点类型的 `attributes` schema 协调 `attributeValues`（补默认 / 删多余 / 类型漂移重置）。
 - `bool IsUnlock(object context = null)` —— 按 `conditionSatisfyType` + 各 `ConditionGroupData` 求值是否已解锁；`conditionGroups` 为空视为无条件解锁（`true`）。求值经 `NodeConditionManager` 路由到各条件检查器。
 - `bool IsFinish()` —— 经 `NodeTreeSaveDataManager` 查询是否已完成。
 
 ### 节点类型 `NodeTypeData` 与连线样式 `LineTypeData`
 
-`NodeTypeData` 描述某一类节点的外观与 UI：`typeName`、`resolution`（尺寸）、`shape`（`ENodeShape`）、`color`、`icon`、`label`、`uiPrefab`（游戏内 UI 预制体，需挂 `UINodeBase`）、`line`（`LineTypeData`）。
+`NodeTypeData` 描述某一类节点的外观、UI 与自定义属性字段：`typeName`、`resolution`（尺寸）、`shape`（`ENodeShape`）、`color`、`icon`、`label`、`uiPrefab`（游戏内 UI 预制体，需挂 `UINodeBase`）、`line`（`LineTypeData`）、`attributes`（`List<AttributeDefinition>`，`com.ale.toolkit`，本类型节点实例的自定义属性字段 schema）。
 
 - **`ENodeShape`**（编辑器画布形状）：`Circle`、`Square`、`Triangle`、`Diamond`、`HorizontalCapsule`、`Parallelogram`、`Pentagon`、`Hexagon`、`Octagon`、`Star`。
 - **`LineTypeData`**：`lineType`（`ELineType`：`Straight` 直线 / `Curve` 曲线 / `Polyline` 折线）、`lineWidth`（像素）、`material`（连线材质，配合 `NodeTree/NodeLineFlow` 可做流光效果）。
@@ -86,7 +87,7 @@
 - `ConditionData`：单条条件 —— `conditionType`（引用 `NodeConditionTypeData.conditionType`）、`comparison`（`EConditionComparison`：`Equal` / `NotEqual` / `Greater` / `Less`）、`conditionParam`（传给检查器的参数字符串）。
 - `ConditionGroupData`：条件组 —— `satisfyType`（`EConditionSatisfyType` All/Any）+ `conditions`（`List<ConditionData>`）。空组视为无限制（恒通过）。
 - `NodeConditionTypeData`：条件类型元数据（`conditionType` + `description`），在 `NodeTreeData` 中预注册，仅供编辑器展示与选择。
-- `NodeCustomData`：`key` / `value` 键值对。
+- 节点自定义属性：模板端 `NodeTypeData.attributes`（`List<AttributeDefinition>`，`com.ale.toolkit`）定义字段 schema，实例端 `NodeData.attributeValues`（`List<AttributeEntry>`）承载值，二者经 `NodeData.RebuildAttributes` 同步。
 
 ---
 

@@ -22,7 +22,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 | モジュール | 役割 | 主な型 |
 |-----------|------|--------|
 | **設定** | ノードツリー設定アセット | `NodeTreeData` |
-| **データ** | ノード / タイプ / 条件 / カスタムデータ | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData`、`NodeCustomData` |
+| **データ** | ノード / タイプ / 条件 / カスタム属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData` |
 | **条件** | 解放判定と拡張 | `INodeConditionChecker`、`NodeConditionManager` |
 | **セーブ** | 解放済み / 完了済み状態 | `NodeTreeSaveDataManager` |
 | **ランタイム UI** | ノードツリー表示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
@@ -65,18 +65,19 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 | `uiIcon` | ノードアイコン（`Sprite`） |
 | `nodeName` / `nodeDesc` | ノード名 / 説明（`com.ale.toolkit` の `AttributeValue`(Text)：プレーンテキスト + 任意のローカライズ参照。`ResolveText()` はローカライズ優先・プレーンにフォールバック） |
 | `position` | キャンバスのピクセル座標 |
-| `customDataList` | `List<NodeCustomData>`、任意のキー / 値ペア。他システム用の拡張データ |
+| `attributeValues` | `List<AttributeEntry>`（`com.ale.toolkit`）、カスタム属性値。フィールド schema は所属する `NodeTypeData.attributes` が定義 |
 | `childNodeIds` | 子ノード ID リスト（ツリー / グラフ構造を構成） |
 
-**主な API**：
+**主な API**（`NodeData` は `com.ale.toolkit` の `AttributeOwner` を継承）：
 
-- `string GetCustomData(string key)` / `void SetCustomData(string key, string value)` —— カスタムデータの読み書き。
+- `T GetAttributeValue<T>(string id, T fallback = default)` / `bool SetAttributeValue<T>(string id, T value)` / `AttributeEntry GetEntry(string id)` —— カスタム属性値を O(1) で読み書き。
+- `void RebuildAttributes(NodeTreeData config)` —— 所属ノードタイプの `attributes` schema に合わせて `attributeValues` を調整（既定値の追加 / 削除済みの除去 / 型変化時のリセット）。
 - `bool IsUnlock(object context = null)` —— `conditionSatisfyType` と各 `ConditionGroupData` から解放状態を評価。`conditionGroups` が空なら無条件で解放（`true`）。評価は `NodeConditionManager` 経由で各チェッカーにルーティングされます。
 - `bool IsFinish()` —— `NodeTreeSaveDataManager` 経由で完了状態を照会。
 
 ### ノードタイプ `NodeTypeData` とライン様式 `LineTypeData`
 
-`NodeTypeData` はノードの外観と UI を記述：`typeName`、`resolution`（サイズ）、`shape`（`ENodeShape`）、`color`、`icon`、`label`、`uiPrefab`（ゲーム内 UI プレハブ、`UINodeBase` が必要）、`line`（`LineTypeData`）。
+`NodeTypeData` はノードの外観・UI・カスタム属性フィールドを記述：`typeName`、`resolution`（サイズ）、`shape`（`ENodeShape`）、`color`、`icon`、`label`、`uiPrefab`（ゲーム内 UI プレハブ、`UINodeBase` が必要）、`line`（`LineTypeData`）、`attributes`（`List<AttributeDefinition>`、`com.ale.toolkit`。本タイプのノードインスタンス用のカスタム属性フィールド schema）。
 
 - **`ENodeShape`**（エディタキャンバスの形状）：`Circle`、`Square`、`Triangle`、`Diamond`、`HorizontalCapsule`、`Parallelogram`、`Pentagon`、`Hexagon`、`Octagon`、`Star`。
 - **`LineTypeData`**：`lineType`（`ELineType`：`Straight` 直線 / `Curve` 曲線 / `Polyline` 折れ線）、`lineWidth`（ピクセル）、`material`（ライン用マテリアル。`NodeTree/NodeLineFlow` と組み合わせると流光表現）。
@@ -86,7 +87,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 - `ConditionData`：単一条件 —— `conditionType`（`NodeConditionTypeData.conditionType` を参照）、`comparison`（`EConditionComparison`：`Equal` / `NotEqual` / `Greater` / `Less`）、`conditionParam`（チェッカーへ渡すパラメータ文字列）。
 - `ConditionGroupData`：条件グループ —— `satisfyType`（`EConditionSatisfyType` All/Any）+ `conditions`（`List<ConditionData>`）。空グループは制限なし（常に通過）扱い。
 - `NodeConditionTypeData`：条件タイプのメタデータ（`conditionType` + `description`）。`NodeTreeData` に事前登録し、エディタでの表示 / 選択に使用。
-- `NodeCustomData`：`key` / `value` のペア。
+- ノードのカスタム属性：テンプレート側 `NodeTypeData.attributes`（`List<AttributeDefinition>`、`com.ale.toolkit`）がフィールド schema を定義し、インスタンス側 `NodeData.attributeValues`（`List<AttributeEntry>`）が値を保持。両者は `NodeData.RebuildAttributes` で同期。
 
 ---
 

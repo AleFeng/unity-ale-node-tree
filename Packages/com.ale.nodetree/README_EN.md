@@ -22,7 +22,7 @@ A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeD
 | Module | Responsibility | Key types |
 |--------|----------------|-----------|
 | **Config** | Node-tree config asset | `NodeTreeData` |
-| **Data** | Node / type / condition / custom data | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData`, `NodeConditionTypeData`, `NodeCustomData` |
+| **Data** | Node / type / condition / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData`, `NodeConditionTypeData` |
 | **Conditions** | Unlock evaluation & extension | `INodeConditionChecker`, `NodeConditionManager` |
 | **Save** | Unlocked / finished state | `NodeTreeSaveDataManager` |
 | **Runtime UI** | Node-tree presentation | `UINodeTreeWindow`, `UINodeBase`, `NodeLineBuilder` |
@@ -65,18 +65,19 @@ A node instance stored in `NodeTreeData.nodes`.
 | `uiIcon` | Node icon (`Sprite`) |
 | `nodeName` / `nodeDesc` | Node name / description (`com.ale.toolkit`'s `AttributeValue`(Text): plain text + optional localization reference; `ResolveText()` prefers localized, falls back to plain) |
 | `position` | Canvas pixel coordinates |
-| `customDataList` | `List<NodeCustomData>`, arbitrary key/value pairs for other systems |
+| `attributeValues` | `List<AttributeEntry>` (`com.ale.toolkit`), custom attribute values; the field schema is defined by the owning `NodeTypeData.attributes` |
 | `childNodeIds` | Child node IDs (forming the tree / graph) |
 
-**Main API**:
+**Main API** (`NodeData` inherits `com.ale.toolkit`'s `AttributeOwner`):
 
-- `string GetCustomData(string key)` / `void SetCustomData(string key, string value)` — read/write custom data.
+- `T GetAttributeValue<T>(string id, T fallback = default)` / `bool SetAttributeValue<T>(string id, T value)` / `AttributeEntry GetEntry(string id)` — O(1) read/write of custom attribute values.
+- `void RebuildAttributes(NodeTreeData config)` — reconciles `attributeValues` against the owning node type's `attributes` schema (add defaults / drop removed / reset on type drift).
 - `bool IsUnlock(object context = null)` — evaluates unlock state from `conditionSatisfyType` + `ConditionGroupData`s; an empty `conditionGroups` means unconditionally unlocked (`true`). Evaluation is routed through `NodeConditionManager` to the registered checkers.
 - `bool IsFinish()` — queries finished state via `NodeTreeSaveDataManager`.
 
 ### Node type `NodeTypeData` and line style `LineTypeData`
 
-`NodeTypeData` describes a category of node: `typeName`, `resolution` (size), `shape` (`ENodeShape`), `color`, `icon`, `label`, `uiPrefab` (in-game UI prefab, must have `UINodeBase`), `line` (`LineTypeData`).
+`NodeTypeData` describes a category of node's appearance, UI and custom attribute fields: `typeName`, `resolution` (size), `shape` (`ENodeShape`), `color`, `icon`, `label`, `uiPrefab` (in-game UI prefab, must have `UINodeBase`), `line` (`LineTypeData`), `attributes` (`List<AttributeDefinition>`, `com.ale.toolkit`; the custom attribute-field schema for node instances of this type).
 
 - **`ENodeShape`** (editor canvas shapes): `Circle`, `Square`, `Triangle`, `Diamond`, `HorizontalCapsule`, `Parallelogram`, `Pentagon`, `Hexagon`, `Octagon`, `Star`.
 - **`LineTypeData`**: `lineType` (`ELineType`: `Straight` / `Curve` / `Polyline`), `lineWidth` (pixels), `material` (line material; pair it with `NodeTree/NodeLineFlow` for a flow effect).
@@ -86,7 +87,7 @@ A node instance stored in `NodeTreeData.nodes`.
 - `ConditionData`: a single condition — `conditionType` (references `NodeConditionTypeData.conditionType`), `comparison` (`EConditionComparison`: `Equal` / `NotEqual` / `Greater` / `Less`), `conditionParam` (parameter string passed to the checker).
 - `ConditionGroupData`: a group — `satisfyType` (`EConditionSatisfyType` All/Any) + `conditions` (`List<ConditionData>`). An empty group is treated as no restriction (always passes).
 - `NodeConditionTypeData`: condition-type metadata (`conditionType` + `description`), pre-registered in `NodeTreeData` for editor display / selection.
-- `NodeCustomData`: a `key` / `value` pair.
+- Node custom attributes: the template side `NodeTypeData.attributes` (`List<AttributeDefinition>`, `com.ale.toolkit`) defines the field schema; the instance side `NodeData.attributeValues` (`List<AttributeEntry>`) holds the values, kept in sync via `NodeData.RebuildAttributes`.
 
 ---
 

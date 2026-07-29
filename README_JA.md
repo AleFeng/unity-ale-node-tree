@@ -67,7 +67,7 @@ Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラ�
 | モジュール | 役割 | 主な型 |
 | --- | --- | --- |
 | **設定** | ノードツリー設定アセット | `NodeTreeData` |
-| **データ** | ノード / タイプ / 条件 / カスタムデータ | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData`、`NodeCustomData` |
+| **データ** | ノード / タイプ / 条件 / カスタム属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData` |
 | **条件** | 解放判定と拡張 | `INodeConditionChecker`、`NodeConditionManager` |
 | **セーブ** | 解放済み / 完了済み状態 | `NodeTreeSaveDataManager` |
 | **ランタイム UI** | ノードツリー表示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
@@ -164,7 +164,7 @@ Packages/com.ale.nodetree/           ← パッケージルート
 ├── package.json  CHANGELOG.md  LICENSE.md  README.md   ← パッケージ内ドキュメント（3 言語）
 ├── Runtime/
 │   ├── Config/      ノードツリー設定アセット NodeTreeData
-│   ├── Data/        データモデル（NodeData / NodeTypeData / LineTypeData / Condition* / NodeCustomData）
+│   ├── Data/        データモデル（NodeData / NodeTypeData / LineTypeData / Condition*）
 │   ├── Conditions/  条件システム（INodeConditionChecker / NodeConditionManager / 組み込みチェッカー）
 │   ├── Save/        セーブマネージャ NodeTreeSaveDataManager
 │   ├── UI/          ランタイム UI（UINodeTreeWindow / UINodeBase）

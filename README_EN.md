@@ -67,7 +67,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 | Module | Responsibility | Key types |
 | --- | --- | --- |
 | **Config** | Node-tree config asset | `NodeTreeData` |
-| **Data** | Node / type / condition / custom data | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData`, `NodeConditionTypeData`, `NodeCustomData` |
+| **Data** | Node / type / condition / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData`, `NodeConditionTypeData` |
 | **Conditions** | Unlock evaluation & extension | `INodeConditionChecker`, `NodeConditionManager` |
 | **Save** | Unlocked / finished state | `NodeTreeSaveDataManager` |
 | **Runtime UI** | Node-tree presentation | `UINodeTreeWindow`, `UINodeBase`, `NodeLineBuilder` |
@@ -164,7 +164,7 @@ Packages/com.ale.nodetree/           ← package root
 ├── package.json  CHANGELOG.md  LICENSE.md  README.md   ← in-package docs (trilingual)
 ├── Runtime/
 │   ├── Config/      node-tree config asset NodeTreeData
-│   ├── Data/        data model (NodeData / NodeTypeData / LineTypeData / Condition* / NodeCustomData)
+│   ├── Data/        data model (NodeData / NodeTypeData / LineTypeData / Condition*)
 │   ├── Conditions/  condition system (INodeConditionChecker / NodeConditionManager / built-in checkers)
 │   ├── Save/        save manager NodeTreeSaveDataManager
 │   ├── UI/          runtime UI (UINodeTreeWindow / UINodeBase)
