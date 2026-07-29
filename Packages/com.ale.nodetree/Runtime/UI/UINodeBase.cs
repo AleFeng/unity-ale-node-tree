@@ -5,17 +5,13 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-#if DOTWEEN
-using DG.Tweening;
-#endif
-
 namespace Ale.NodeTree.Runtime
 {
     /// <summary>
     /// 节点UI基类（MonoBehaviour + IPoolable）。
     /// 通过 ToolkitPool 管理生命周期，子类重写各虚方法实现具体UI逻辑。
     /// 功能：节点图标显示 / 节点名称·描述文本（toolkit AttributeValue.Text，本地化优先+纯文本回退）/
-    ///        鼠标悬停弹窗淡入淡出（需 DOTWEEN）/ 鼠标点击回调。
+    ///        鼠标悬停弹窗淡入淡出（基于 toolkit 中央 Tween）/ 鼠标点击回调。
     /// </summary>
     public class UINodeBase : MonoBehaviour, IPoolable,
         IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
@@ -85,11 +81,8 @@ namespace Ale.NodeTree.Runtime
             // 复位选中态：节点可能在被选中时 despawn，归还前调用一次还原钩子，避免复用后残留高亮。
             OnNodeDeselected();
 
-#if DOTWEEN
-            // 归还对象池前强制停止弹窗动画，避免对象复用时残留动画状态
-            _infoPanelTween?.Kill();
-            _infoPanelTween = null;
-#endif
+            // 归还对象池前打断弹窗淡入淡出，避免对象复用时残留动画状态
+            _infoPanelFade.Kill();
 
             // 重置 信息弹窗
             ResetInfoPanel();
@@ -100,15 +93,13 @@ namespace Ale.NodeTree.Runtime
         [Header("鼠标悬停弹窗")]
         [Tooltip("弹窗根节点的 CanvasGroup，鼠标悬停时淡入，移出时淡出。为 null 时跳过弹窗逻辑。")]
         [SerializeField] protected CanvasGroup infoPanel;
-#if DOTWEEN
         [Tooltip("弹窗淡入动画时长（秒），默认 0.2。")]
         [SerializeField] protected float fadeInDuration  = 0.2f;
         [Tooltip("弹窗淡出动画时长（秒），默认 0.3。")]
         [SerializeField] protected float fadeOutDuration = 0.3f;
-        
-        // DOTWEEN 动画实例，用于淡入淡出动画的控制和优化，避免重复创建动画实例。
-        private Tween _infoPanelTween;
-#endif
+
+        // 悬停弹窗淡入淡出句柄（基于 toolkit 中央 Tween），用于打断上一次动画。
+        private ToolkitTweenHandle _infoPanelFade;
         // 弹窗 是否已经淡入
         private bool _isInfoPanelFadeIn;
 
@@ -134,19 +125,12 @@ namespace Ale.NodeTree.Runtime
         {
             if (_isInfoPanelFadeIn) return;
             _isInfoPanelFadeIn = true;
-            
-#if DOTWEEN
-            _infoPanelTween?.Kill();
+
+            _infoPanelFade.Kill();
             infoPanel.interactable   = true;
             infoPanel.blocksRaycasts = true;
-            _infoPanelTween = DOTween
-                .To(() => infoPanel.alpha, x => infoPanel.alpha = x, 1f, fadeInDuration)
-                .SetEase(Ease.OutQuad);
-#else
-            infoPanel.alpha          = 1f;
-            infoPanel.interactable   = true;
-            infoPanel.blocksRaycasts = true;
-#endif
+            _infoPanelFade = ToolkitTween.FadeCanvasGroup(
+                infoPanel, 1f, fadeInDuration, EToolkitEase.OutQuad);
         }
         
         /// <summary>
@@ -156,19 +140,12 @@ namespace Ale.NodeTree.Runtime
         {
             if (!_isInfoPanelFadeIn) return;
             _isInfoPanelFadeIn = false;
-            
-#if DOTWEEN
-            _infoPanelTween?.Kill();
+
+            _infoPanelFade.Kill();
             infoPanel.interactable   = false;
             infoPanel.blocksRaycasts = false;
-            _infoPanelTween = DOTween
-                .To(() => infoPanel.alpha, x => infoPanel.alpha = x, 0f, fadeOutDuration)
-                .SetEase(Ease.InQuad);
-#else
-            infoPanel.alpha          = 0f;
-            infoPanel.interactable   = false;
-            infoPanel.blocksRaycasts = false;
-#endif
+            _infoPanelFade = ToolkitTween.FadeCanvasGroup(
+                infoPanel, 0f, fadeOutDuration, EToolkitEase.InQuad);
         }
         #endregion
 
@@ -188,7 +165,7 @@ namespace Ale.NodeTree.Runtime
             => OnPointerExitNode();
 
         /// <summary>
-        /// 鼠标悬停开始时调用：弹窗淡入（有 DOTWEEN 时带缓动动画，否则立即显示）。
+        /// 鼠标悬停开始时调用：弹窗淡入（带缓动，基于 toolkit 中央 Tween）。
         /// 子类可重写以实现自定义悬停效果（如放大、发光等），建议调用 base.OnPointerEnterNode()
         /// 以保持弹窗淡入行为，或完全自定义。
         /// </summary>
@@ -201,7 +178,7 @@ namespace Ale.NodeTree.Runtime
         }
 
         /// <summary>
-        /// 鼠标悬停结束时调用：弹窗淡出（有 DOTWEEN 时带缓动动画，否则立即隐藏）。
+        /// 鼠标悬停结束时调用：弹窗淡出（带缓动，基于 toolkit 中央 Tween）。
         /// 子类可重写以实现自定义淡出效果，建议调用 base.OnPointerExitNode()
         /// 以保持弹窗淡出行为，或完全自定义。
         /// </summary>
