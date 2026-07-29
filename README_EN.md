@@ -95,7 +95,7 @@ https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetr
 This installs the latest commit on `main`. **To pin a version, append `#<tag>` at the very end of the whole URL** (after `?path=`):
 
 ```
-https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetree#1.0.0
+https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetree#1.1.0
 ```
 
 Available tags are listed under [Releases](https://github.com/AleFeng/unity-ale-node-tree/releases).

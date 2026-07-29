@@ -95,7 +95,7 @@ https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetr
 これで `main` の最新コミットが入ります。**バージョンを固定するには、URL 全体の末尾に `#<tag>` を付けます**（`?path=` の後）：
 
 ```
-https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetree#1.0.0
+https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetree#1.1.0
 ```
 
 利用可能な tag は [Releases](https://github.com/AleFeng/unity-ale-node-tree/releases) を参照。
