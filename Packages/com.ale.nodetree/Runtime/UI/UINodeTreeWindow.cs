@@ -362,8 +362,14 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         private void InitPools()
         {
+            // 销毁旧对象池 GameObject（连同其池内非激活克隆），避免重复 InitTree 累积孤儿层级。
+            // DespawnAll 仅把激活克隆归还池、不销毁 Pool_* 对象本身，故需显式 Destroy。
             foreach (var pool in _pools.Values)
-                if (pool) pool.DespawnAll();
+            {
+                if (!pool) continue;
+                pool.DespawnAll();
+                Destroy(pool.gameObject);
+            }
             _pools.Clear();
             _activeNodes.Clear();
 
@@ -458,6 +464,10 @@ namespace Ale.NodeTree.Runtime
             {
                 if (cr)
                 {
+                    // 先销毁 CanvasRenderer 持有的合并 Mesh（原生对象不被 GC，否则每次重建泄漏一个/类型），
+                    // 再销毁承载它的 GameObject。
+                    var mesh = cr.GetMesh();
+                    if (mesh) Destroy(mesh);
                     cr.SetMesh(null);
                     Destroy(cr.gameObject);
                 }

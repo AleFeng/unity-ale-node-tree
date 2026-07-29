@@ -87,6 +87,13 @@ namespace Ale.NodeTree.Runtime
             nodeData = null;
             nodeType = null;
 
+            // 清空外部订阅：对象池复用同一实例，若不清空，旧订阅者会在该实例复用为其它节点后继续被触发，
+            // 且其捕获的引用会被一直保活（内存泄漏）。
+            Clicked = null;
+
+            // 复位选中态：节点可能在被选中时 despawn，归还前调用一次还原钩子，避免复用后残留高亮。
+            OnNodeDeselected();
+
 #if DOTWEEN
             // 归还对象池前强制停止弹窗动画，避免对象复用时残留动画状态
             _infoPanelTween?.Kill();
