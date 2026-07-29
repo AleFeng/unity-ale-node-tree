@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Ale.Toolkit.Runtime;
 using UnityEngine;
 
 namespace Ale.NodeTree.Runtime
@@ -26,6 +28,8 @@ namespace Ale.NodeTree.Runtime
         public GameObject uiPrefab;
         [Tooltip("从父节点连向此类型节点的默认连线样式")]
         public LineTypeData line = new LineTypeData();
+        [Tooltip("自定义属性字段（schema）：本类型的节点实例据此生成可逐一配置的属性值。")]
+        public List<AttributeDefinition> attributes = new List<AttributeDefinition>();
     }
     
     /// <summary>节点的形状类型。</summary>

@@ -7,10 +7,14 @@ namespace Ale.NodeTree.Runtime
 {
     /// <summary>
     /// 节点实例数据。存储在 NodeTreeData.nodes 列表中，
-    /// 代表节点树中的一个具体节点，包含展示信息、条件组、自定义数据及子节点引用。
+    /// 代表节点树中的一个具体节点，包含展示信息、条件组、自定义属性值及子节点引用。
+    ///
+    /// <para>继承 <see cref="AttributeOwner"/> 以复用带缓存的 O(1) <see cref="AttributeOwner.GetEntry"/>
+    /// 与 <see cref="AttributeOwner.GetAttributeValue{T}"/> / <see cref="AttributeOwner.SetAttributeValue{T}"/>；
+    /// 属性字段的 schema 由所属 <see cref="NodeTypeData.attributes"/> 定义。</para>
     /// </summary>
     [Serializable]
-    public class NodeData
+    public class NodeData : AttributeOwner
     {
         [Header("基础设置")]
         [Tooltip("节点ID: 必须在同一 NodeTreeData 内唯一")]
@@ -36,42 +40,27 @@ namespace Ale.NodeTree.Runtime
         [Tooltip("节点位置: 决定节点在编辑器画布中的位置（像素坐标）")]
         public Vector2 position;
         
-        [Header("自定义数据")]
-        [Tooltip("自定义数据列表: 可存储任意键值对，供其他游戏系统使用。")]
-        public List<NodeCustomData> customDataList = new List<NodeCustomData>();
+        [Header("自定义属性")]
+        [Tooltip("自定义属性值: 由所属 NodeTypeData.attributes 定义，可在编辑器逐节点配置；运行时经 GetAttributeValue<T>(id) 读取。")]
+        public List<AttributeEntry> attributeValues = new List<AttributeEntry>();
 
         [Header("子节点列表")]
         public List<string> childNodeIds = new List<string>();
-        
-        #region 自定义数据
-        /// <summary>
-        /// 获取 自定义数据。
-        /// </summary>
-        /// <param name="key">自定义数据键名。</param>
-        /// <returns>对应的值；键不存在时返回 null。</returns>
-        public string GetCustomData(string key)
-        {
-            foreach (var d in customDataList)
-                if (d.key == key) return d.value;
-            return null;
-        }
 
+        // 将 attributeValues 暴露给基类 AttributeOwner 的懒加载字典缓存。
+        protected override List<AttributeEntry> AttributeEntries => attributeValues;
+
+        #region 自定义属性
         /// <summary>
-        /// 设置 自定义数据
+        /// 按当前节点类型的属性字段定义（<see cref="NodeTypeData.attributes"/>）协调 <see cref="attributeValues"/>：
+        /// 为新增字段补默认值、移除已删字段、类型漂移时重置为新类型默认值。幂等，可在编辑器中反复调用。
         /// </summary>
-        /// <param name="key">自定义数据键名（已存在则覆盖，否则追加）。</param>
-        /// <param name="value">要写入的值。</param>
-        public void SetCustomData(string key, string value)
+        /// <param name="config">节点所属的 NodeTreeData（用于按 nodeTypeRef 解析节点类型）。</param>
+        public void RebuildAttributes(NodeTreeData config)
         {
-            foreach (var d in customDataList)
-            {
-                if (d.key == key)
-                {
-                    d.value = value;
-                    return;
-                }
-            }
-            customDataList.Add(new NodeCustomData { key = key, value = value });
+            var type = config != null ? config.GetNodeType(nodeTypeRef) : null;
+            AttributeSync.Sync(attributeValues, type != null ? type.attributes : null);
+            InvalidateEntryCache();
         }
         #endregion
 

@@ -207,9 +207,12 @@ namespace Ale.NodeTree.Editor
             // AssetDatabase.SaveAssets() 太频繁会卡顿，改为实时 SetDirty，Unity 自动在适当时机写盘
         }
 
-        // ── AttributeFieldDrawer 绘制上下文（供节点名/描述 AttributeValue.Text 使用）──
+        // ── AttributeFieldDrawer 绘制上下文（供节点名/描述、节点自定义属性 AttributeValue 使用）──
         private AttrEditorContext _attrCtx;
         private AttrEditorContext AttrCtx => _attrCtx ??= new AttrEditorContext(this);
+
+        // ── 节点类型「自定义属性字段」schema 列表绘制器（持久实例：按绑定的 attributes 引用变更自动重建）──
+        private readonly AttributeDefinitionListDrawer _nodeTypeAttrListDrawer = new AttributeDefinitionListDrawer();
 
         /// <summary>
         /// 供 <see cref="AttributeFieldDrawer"/> 绘制节点名/描述（<see cref="AttributeValue"/> Text）的最小
@@ -823,24 +826,24 @@ namespace Ale.NodeTree.Editor
             node.position = EditorGUILayout.Vector2Field("画布坐标 (position)", node.position);
             EditorGUILayout.Space(8f);
             
-            // ── 自定义扩展数据（customDataList）──
-            EditorGUILayout.LabelField("自定义数据", EditorStyles.boldLabel);
-            for (int i = 0; i < node.customDataList.Count; i++)
+            // ── 自定义属性值（来自节点类型的 attributes 定义）──
+            // 先按 schema 幂等同步（补默认/删多余/类型漂移重置），再逐条用 AttributeFieldDrawer 绘制值。
+            // AttributeFieldDrawer 自带 Undo/标脏/复制粘贴，独立于上方节点编辑的 BeginChangeCheck。
+            EditorGUILayout.LabelField("自定义属性", EditorStyles.boldLabel);
+            int attrCountBefore = node.attributeValues.Count;
+            node.RebuildAttributes(_config);
+            if (node.attributeValues.Count != attrCountBefore) MarkDirty(); // schema 结构变化时落盘
+            if (node.attributeValues.Count == 0)
             {
-                var d = node.customDataList[i];
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    d.key   = EditorGUILayout.TextField(d.key,   GUILayout.Width(100f));
-                    d.value = EditorGUILayout.TextField(d.value);
-                    if (GUILayout.Button("×", redButtonStyle, GUILayout.Width(22f)))
-                    {
-                        node.customDataList.RemoveAt(i);
-                        break;
-                    }
-                }
+                EditorGUILayout.LabelField(
+                    "（该节点类型未定义属性字段。可在左侧「节点类型」→「编辑」中添加。）",
+                    EditorStyles.centeredGreyMiniLabel);
             }
-            if (GUILayout.Button("+ 添加自定义数据"))
-                node.customDataList.Add(new NodeCustomData());
+            else
+            {
+                foreach (var entry in node.attributeValues)
+                    AttributeFieldDrawer.Draw(AttrCtx, entry.id, entry.value, null);
+            }
             EditorGUILayout.Space(8f);
             
             // childNodeIds：有序子节点 ID 列表（只读显示）
@@ -916,6 +919,12 @@ namespace Ale.NodeTree.Editor
                 RebuildTypeNameCache(); // typeName 变化时同步刷新下拉缓存
                 MarkDirty();
             }
+
+            // ── 自定义属性字段（schema）：本类型的节点实例据此生成可配置的属性值 ──
+            // AttributeDefinitionListDrawer 自带添加/删除/拖拽重排与 Undo（经 AttrCtx）；node-tree 无枚举源，src 传 null。
+            EditorGUILayout.Space(8f);
+            if (type.attributes == null) type.attributes = new List<AttributeDefinition>();
+            _nodeTypeAttrListDrawer.Draw(AttrCtx, null, type.attributes, "自定义属性字段");
         }
         #endregion
         #endregion
