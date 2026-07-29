@@ -1,10 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Ale.Toolkit.Runtime;
 using UnityEngine;
-
-#if HAS_LOCALIZATION
-using UnityEngine.Localization;
-#endif
 
 namespace Ale.NodeTree.Runtime
 {
@@ -32,12 +29,10 @@ namespace Ale.NodeTree.Runtime
         [Header("UI显示")]
         [Tooltip("节点图标: 在UI中显示的图标")]
         public Sprite uiIcon;
-#if HAS_LOCALIZATION
-        [Tooltip("本地化节点名称: 在UI中显示的 节点名称")]
-        public LocalizedString localizeNodeName;
-        [Tooltip("本地化节点描述: 在UI中显示的 节点描述")]
-        public LocalizedString localizeNodeDesc;
-#endif
+        [Tooltip("节点名称: AttributeValue(Text)，纯文本 fallback + 可选本地化引用；启用 toolkit 本地化(ATK_LOCALIZATION)时 ResolveText 优先取多语文本。")]
+        public AttributeValue nodeName = new AttributeValue(EFieldType.Text);
+        [Tooltip("节点描述: AttributeValue(Text)，纯文本 fallback + 可选本地化引用；启用 toolkit 本地化(ATK_LOCALIZATION)时 ResolveText 优先取多语文本。")]
+        public AttributeValue nodeDesc = new AttributeValue(EFieldType.Text);
         [Tooltip("节点位置: 决定节点在编辑器画布中的位置（像素坐标）")]
         public Vector2 position;
         

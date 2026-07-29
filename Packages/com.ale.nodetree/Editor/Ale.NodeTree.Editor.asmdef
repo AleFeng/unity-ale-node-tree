@@ -2,7 +2,9 @@
     "name": "Ale.NodeTree.Editor",
     "rootNamespace": "",
     "references": [
-        "Ale.NodeTree.Runtime"
+        "Ale.NodeTree.Runtime",
+        "Ale.Toolkit.Runtime",
+        "Ale.Toolkit.Editor"
     ],
     "includePlatforms": [
         "Editor"

@@ -19,24 +19,6 @@ MonoBehaviour:
     conditionSatisfyType: 0
     conditionGroups: []
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 0, y: 0}
     customDataList: []
     childNodeIds:
@@ -53,24 +35,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 260, y: -220}
     customDataList: []
     childNodeIds:
@@ -86,24 +50,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 260, y: 220}
     customDataList: []
     childNodeIds:
@@ -119,24 +65,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9_0"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 520, y: -220}
     customDataList: []
     childNodeIds:
@@ -157,24 +85,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 780, y: 0}
     customDataList: []
     childNodeIds:
@@ -191,24 +101,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0_0"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 1040, y: -220}
     customDataList: []
     childNodeIds: []
@@ -223,24 +115,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0_0"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 1040, y: 0}
     customDataList: []
     childNodeIds: []
@@ -255,24 +129,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9_1"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 520, y: 220}
     customDataList: []
     childNodeIds:
@@ -290,24 +146,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 1040, y: 220}
     customDataList: []
     childNodeIds: []
@@ -322,24 +160,6 @@ MonoBehaviour:
         comparison: 0
         conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
     uiIcon: {fileID: 0}
-    localizeNodeName:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 45888716800
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
-    localizeNodeDesc:
-      m_TableReference:
-        m_TableCollectionName: GUID:7b88e45053cb23747bb3df47c005bc67
-      m_TableEntryReference:
-        m_KeyId: 108614533120
-        m_Key: 
-      m_FallbackState: 0
-      m_WaitForCompletion: 0
-      m_LocalVariables: []
     position: {x: 1040, y: 460}
     customDataList: []
     childNodeIds: []
@@ -373,6 +193,3 @@ MonoBehaviour:
     description: "\u8282\u70B9\u5DF2\u5B8C\u6210\uFF08\u5BF9\u5E94 StorySaveDataManager.IsNodeFinished\uFF09"
   layoutDirection: 0
   zoom: 1
-  references:
-    version: 2
-    RefIds: []

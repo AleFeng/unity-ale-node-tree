@@ -1,12 +1,9 @@
 using System;
 using Ale.Toolkit.Runtime;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-
-#if HAS_LOCALIZATION
-using UnityEngine.Localization.Components;
-#endif
 
 #if DOTWEEN
 using DG.Tweening;
@@ -17,7 +14,7 @@ namespace Ale.NodeTree.Runtime
     /// <summary>
     /// 节点UI基类（MonoBehaviour + IPoolable）。
     /// 通过 ToolkitPool 管理生命周期，子类重写各虚方法实现具体UI逻辑。
-    /// 功能：节点图标显示 / 本地化文本绑定（需 HAS_LOCALIZATION）/
+    /// 功能：节点图标显示 / 节点名称·描述文本（toolkit AttributeValue.Text，本地化优先+纯文本回退）/
     ///        鼠标悬停弹窗淡入淡出（需 DOTWEEN）/ 鼠标点击回调。
     /// </summary>
     public class UINodeBase : MonoBehaviour, IPoolable,
@@ -28,13 +25,11 @@ namespace Ale.NodeTree.Runtime
         [Tooltip("显示节点图标的 Image 组件，绑定时自动将 Sprite 设置为 NodeData.uiIcon。")]
         [SerializeField] protected Image iconImage;
 
-#if HAS_LOCALIZATION
-        [Header("本地化文本 (需 HAS_LOCALIZATION)")]
-        [Tooltip("节点名称的 LocalizeStringEvent 组件，绑定时自动关联 NodeData.localizeNodeName。")]
-        [SerializeField] protected LocalizeStringEvent nodeNameEvent;
-        [Tooltip("节点描述的 LocalizeStringEvent 组件，绑定时自动关联 NodeData.localizeNodeDesc。")]
-        [SerializeField] protected LocalizeStringEvent nodeDescEvent;
-#endif
+        [Header("节点文本")]
+        [Tooltip("节点名称文本组件，绑定时用 NodeData.nodeName.ResolveText() 填充；为空则跳过。")]
+        [SerializeField] protected TMP_Text nodeNameText;
+        [Tooltip("节点描述文本组件，绑定时用 NodeData.nodeDesc.ResolveText() 填充；为空则跳过。")]
+        [SerializeField] protected TMP_Text nodeDescText;
 
         /// <summary>当前绑定的节点实例数据，未绑定时为 null。</summary>
         public NodeData nodeData;
@@ -43,7 +38,7 @@ namespace Ale.NodeTree.Runtime
         
         /// <summary>
         /// 绑定节点数据，由 UINodeTreeWindow 在生成节点UI时调用。
-        /// 自动完成：节点图标赋值、本地化文本关联（需 HAS_LOCALIZATION）、弹窗初始化为隐藏状态。
+        /// 自动完成：节点图标赋值、名称/描述文本解析（AttributeValue.ResolveText）、弹窗初始化为隐藏状态。
         /// 子类可重写以执行额外初始化（如状态色块、完成标记、解锁动画等）。
         /// </summary>
         public virtual void OnBindData(NodeData data, NodeTypeData type)
@@ -63,15 +58,11 @@ namespace Ale.NodeTree.Runtime
                     iconImage.sprite  = hasIcon ? data.uiIcon : null;
                 }
 
-#if HAS_LOCALIZATION
-                // 节点名称（本地化）：绑定 LocalizeStringEvent 的 StringReference
-                if (nodeNameEvent)
-                    nodeNameEvent.StringReference = data.localizeNodeName;
-
-                // 节点描述（本地化）：绑定 LocalizeStringEvent 的 StringReference
-                if (nodeDescEvent)
-                    nodeDescEvent.StringReference = data.localizeNodeDesc;
-#endif
+                // 节点名称 / 描述：用 AttributeValue.Text 解析（启用 toolkit 本地化时取多语文本，否则纯文本 fallback）
+                if (nodeNameText)
+                    nodeNameText.text = data.nodeName != null ? data.nodeName.ResolveText() : string.Empty;
+                if (nodeDescText)
+                    nodeDescText.text = data.nodeDesc != null ? data.nodeDesc.ResolveText() : string.Empty;
             }
             
             // 重置 信息弹窗

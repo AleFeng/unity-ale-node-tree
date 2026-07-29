@@ -3,7 +3,7 @@
     "rootNamespace": "",
     "references": [
         "Ale.Toolkit.Runtime",
-        "Unity.Localization"
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

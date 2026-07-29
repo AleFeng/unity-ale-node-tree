@@ -4,6 +4,8 @@ using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
 using Ale.NodeTree.Runtime;
+using Ale.Toolkit.Runtime;
+using Ale.Toolkit.Editor;
 
 namespace Ale.NodeTree.Editor
 {
@@ -187,6 +189,31 @@ namespace Ale.NodeTree.Editor
             _needDuplicateCheck = true; // 节点数据已变，下一帧重新检查重名
             EditorUtility.SetDirty(_config);
             // AssetDatabase.SaveAssets() 太频繁会卡顿，改为实时 SetDirty，Unity 自动在适当时机写盘
+        }
+
+        // ── AttributeFieldDrawer 绘制上下文（供节点名/描述 AttributeValue.Text 使用）──
+        private AttrEditorContext _attrCtx;
+        private AttrEditorContext AttrCtx => _attrCtx ??= new AttrEditorContext(this);
+
+        /// <summary>
+        /// 供 <see cref="AttributeFieldDrawer"/> 绘制节点名/描述（<see cref="AttributeValue"/> Text）的最小
+        /// <see cref="IEditorContext"/> 适配器。AttributeFieldDrawer 仅用 RecordUndo / MarkDirty / Repaint，
+        /// 不访问 Serialized / Resolver，故二者返回 null。
+        /// </summary>
+        private sealed class AttrEditorContext : IEditorContext
+        {
+            private readonly NodeTreeEditorWindow _owner;
+            public AttrEditorContext(NodeTreeEditorWindow owner) => _owner = owner;
+
+            public SerializedObject  Serialized => null;
+            public IAssetRefResolver Resolver   => null;
+
+            public void RecordUndo(string actionName)
+            {
+                if (_owner._config) Undo.RecordObject(_owner._config, actionName);
+            }
+            public void MarkDirty() => _owner.MarkDirty();
+            public void Repaint()   => _owner.Repaint();
         }
         
         /// <summary>
@@ -578,8 +605,6 @@ namespace Ale.NodeTree.Editor
         // ── 条件系统下拉标签（静态，避免每帧重建） ──
         private static readonly string[] SatisfyTypeLabels    = { "满足所有", "满足任意" };
         private static readonly string[] ComparisonLabels     = { "等于", "不等于", "大于", "小于" };
-        // ── SerializedObject 缓存（用于 HAS_LOCALIZATION 下 LocalizedString 的 PropertyDrawer）──
-        private SerializedObject _serializedConfig; // 延迟创建，config 变化时自动重建
         // ── 右侧面板节点 ID 重名警告 ──
         private string _idDuplicateWarning; // 当前检测到的重复 ID 输入值（非空时显示警告）
         private string _snapIdDuplicateWarning; // Layout 快照，保证 Repaint 控件数量与 Layout 完全一致
@@ -759,25 +784,14 @@ namespace Ale.NodeTree.Editor
             node.uiIcon = (Sprite)EditorGUILayout.ObjectField(
                 "中心图标 (uiIcon)", node.uiIcon, typeof(Sprite), false);
             EditorGUILayout.Space(4f);
-#if HAS_LOCALIZATION
-            // ── 本地化（localizeNodeName / localizeNodeDesc）──
-            // 使用 SerializedObject + PropertyField 以正确渲染 LocalizedString 的属性抽屉
-            EnsureSerializedConfig();
-            int nodeListIdx = _config.nodes.IndexOf(node);
-            if (nodeListIdx >= 0)
-            {
-                _serializedConfig.Update();
-                var nodesProp   = _serializedConfig.FindProperty("nodes");
-                var nodeProp    = nodesProp.GetArrayElementAtIndex(nodeListIdx);
-                EditorGUILayout.PropertyField(
-                    nodeProp.FindPropertyRelative("localizeNodeName"),
-                    new GUIContent("节点名称（本地化）"));
-                EditorGUILayout.PropertyField(
-                    nodeProp.FindPropertyRelative("localizeNodeDesc"),
-                    new GUIContent("节点描述（本地化）"));
-                _serializedConfig.ApplyModifiedProperties();
-            }
-#endif
+
+            // ── 节点名称 / 描述（AttributeValue.Text：纯文本 fallback + 可选本地化引用）──
+            // 用 toolkit AttributeFieldDrawer 绘制（含原生本地化选择器）；Undo / 标脏经 AttrCtx。
+            AttributeFieldDrawer.Draw(AttrCtx, "节点名称", node.nodeName, null);
+            EditorGUILayout.Space(2f);
+            AttributeFieldDrawer.Draw(AttrCtx, "节点描述", node.nodeDesc, null);
+            EditorGUILayout.Space(4f);
+
             // position：节点在编辑器画布中的位置（像素坐标）
             node.position = EditorGUILayout.Vector2Field("画布坐标 (position)", node.position);
             EditorGUILayout.Space(8f);
