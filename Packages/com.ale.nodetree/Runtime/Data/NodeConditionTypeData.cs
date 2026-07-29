@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace Ale.NodeTree.Runtime
 {
@@ -9,7 +10,9 @@ namespace Ale.NodeTree.Runtime
     [Serializable]
     public class NodeConditionTypeData
     {
-        public string conditionType; // 条件类型唯一标识，与 INodeConditionChecker.ConditionType 对应
-        public string description;  // 条件的描述说明，仅用于编辑器展示
+        [Tooltip("条件类型唯一标识，与 INodeConditionChecker.ConditionType 对应")]
+        public string conditionType;
+        [Tooltip("条件的描述说明，仅用于编辑器展示")]
+        public string description;
     }
 }

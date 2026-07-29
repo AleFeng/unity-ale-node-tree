@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace Ale.NodeTree.Runtime
 {
@@ -9,7 +10,9 @@ namespace Ale.NodeTree.Runtime
     [Serializable]
     public class NodeCustomData
     {
-        public string key;   // 数据键名，通过 NodeData.GetCustomData(key) 查询
-        public string value; // 数据值（字符串格式，由业务层自行解析）
+        [Tooltip("数据键名，通过 NodeData.GetCustomData(key) 查询")]
+        public string key;
+        [Tooltip("数据值（字符串格式，由业务层自行解析）")]
+        public string value;
     }
 }

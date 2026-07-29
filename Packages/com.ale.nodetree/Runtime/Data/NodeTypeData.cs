@@ -77,17 +77,11 @@ namespace Ale.NodeTree.Runtime
     [Serializable]
     public class LineTypeData
     {
-        /// <summary>
-        /// 线型配置：决定节点之间连线的形状（直线、曲线或折线），
-        /// </summary>
+        [Tooltip("线型配置：决定节点之间连线的形状（直线、曲线或折线）。")]
         public ELineType lineType = ELineType.Straight;
-        /// <summary>
-        /// 线宽配置：以像素为单位，决定连线的粗细程度，数值越大线条越粗。建议在 1-20 之间调整以获得最佳视觉效果。
-        /// </summary>
+        [Tooltip("线宽配置：以像素为单位，决定连线的粗细，建议 1-20。")]
         public float lineWidth = 10f;
-        /// <summary>
-        /// 渲染材质配置：决定连线的视觉风格和颜色，可以使用 Unity 的 Material 资源进行设置。建议使用支持颜色属性的材质，以便在编辑器中调整连线颜色。
-        /// </summary>
+        [Tooltip("渲染材质：决定连线的视觉风格与颜色；建议使用支持颜色属性的材质。")]
         public Material material;
     }
     

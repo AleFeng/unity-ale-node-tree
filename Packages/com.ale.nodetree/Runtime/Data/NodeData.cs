@@ -47,8 +47,8 @@ namespace Ale.NodeTree.Runtime
         /// <summary>
         /// 获取 自定义数据。
         /// </summary>
-        /// <param name="key"></param>
-        /// <returns></returns>
+        /// <param name="key">自定义数据键名。</param>
+        /// <returns>对应的值；键不存在时返回 null。</returns>
         public string GetCustomData(string key)
         {
             foreach (var d in customDataList)
@@ -59,8 +59,8 @@ namespace Ale.NodeTree.Runtime
         /// <summary>
         /// 设置 自定义数据
         /// </summary>
-        /// <param name="key"></param>
-        /// <param name="value"></param>
+        /// <param name="key">自定义数据键名（已存在则覆盖，否则追加）。</param>
+        /// <param name="value">要写入的值。</param>
         public void SetCustomData(string key, string value)
         {
             foreach (var d in customDataList)
