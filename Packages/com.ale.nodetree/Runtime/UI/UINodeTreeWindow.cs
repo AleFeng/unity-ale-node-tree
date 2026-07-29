@@ -80,7 +80,7 @@ namespace Ale.NodeTree.Runtime
             if (configOverride) config = configOverride;
             if (!config)
             {
-                Debug.LogWarning("[UINodeTreeWindow] config（ConfigNodeTree）未赋值，无法初始化节点树。", this);
+                Debug.LogWarning("[UINodeTreeWindow] config（NodeTreeData）未赋值，无法初始化节点树。", this);
                 return;
             }
 
@@ -101,12 +101,16 @@ namespace Ale.NodeTree.Runtime
         {
             if (_selectedNodeId == nodeId) return;
 
-            if (_activeNodes.TryGetValue(_selectedNodeId, out var prev))
+            // _selectedNodeId 初始为 null，Dictionary.TryGetValue(null) 会抛 ArgumentNullException，
+            // 故先判空再查激活列表。
+            if (!string.IsNullOrEmpty(_selectedNodeId)
+                && _activeNodes.TryGetValue(_selectedNodeId, out var prev))
                 prev.OnNodeDeselected();
 
             _selectedNodeId = nodeId;
 
-            if (_activeNodes.TryGetValue(_selectedNodeId, out var next))
+            if (!string.IsNullOrEmpty(_selectedNodeId)
+                && _activeNodes.TryGetValue(_selectedNodeId, out var next))
                 next.OnNodeSelected();
         }
         
@@ -204,6 +208,7 @@ namespace Ale.NodeTree.Runtime
 
             float minX = float.MaxValue, maxX = float.MinValue;
             float minY = float.MaxValue, maxY = float.MinValue;
+            bool  anyProcessed = false;
 
             foreach (var node in config.nodes)
             {
@@ -217,6 +222,15 @@ namespace Ale.NodeTree.Runtime
                 maxX = Mathf.Max(maxX, node.position.x + halfW);
                 minY = Mathf.Min(minY, node.position.y - halfH);
                 maxY = Mathf.Max(maxY, node.position.y + halfH);
+                anyProcessed = true;
+            }
+
+            // 列表非空但所有节点均为 null：无有效包围盒（minX/maxX 仍为极值），
+            // 继续计算会得到垃圾 sizeDelta，故回落为零偏移并直接返回。
+            if (!anyProcessed)
+            {
+                _nodePositionOffset = Vector2.zero;
+                return;
             }
 
             // nodeTreePadding: x=左, y=上, z=右, w=下
@@ -379,8 +393,15 @@ namespace Ale.NodeTree.Runtime
 
             var parent = _nodeContainer ? (Transform)_nodeContainer : nodeTreeRoot;
             var nodeInstance = pool.Spawn(Vector3.zero, Quaternion.identity, parent);
+            if (!nodeInstance) return;
+
             var nodeUI = nodeInstance.GetComponent<UINodeBase>();
-            if (!nodeUI) return;
+            if (!nodeUI)
+            {
+                // 预制体缺少 UINodeBase 组件：立即归还实例，避免激活实例泄漏且永不再被裁剪。
+                ToolkitPool.Despawn(nodeInstance);
+                return;
+            }
 
             var nodeType = config.GetNodeType(nodeData.nodeTypeRef);
             nodeUI.OnBindData(nodeData, nodeType);

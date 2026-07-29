@@ -55,15 +55,12 @@ namespace Ale.NodeTree.Runtime
             if (data != null)
             {
                 // 节点图标：将 Image.sprite 设置为 NodeData.uiIcon
-                if (iconImage && data.uiIcon)
+                // iconImage 未在预制体上赋值时整段跳过，避免原 else 分支解引用 null 抛 NRE。
+                if (iconImage)
                 {
-                    iconImage.enabled = true;
-                    iconImage.sprite = data.uiIcon;
-                }
-                else
-                {
-                    iconImage.enabled = false;
-                    iconImage.sprite = null;
+                    bool hasIcon = data.uiIcon;
+                    iconImage.enabled = hasIcon;
+                    iconImage.sprite  = hasIcon ? data.uiIcon : null;
                 }
 
 #if HAS_LOCALIZATION
