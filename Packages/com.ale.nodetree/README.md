@@ -13,7 +13,7 @@
 - 高性能运行时：按节点类型对象池化、视口裁剪按需 Spawn / Despawn、连线 Mesh 合批降 DrawCall。
 - 可扩展条件：实现 `INodeConditionChecker` 即可自定义解锁条件，内置「已解锁 / 已完成」两种检查器。
 - 存档友好：`NodeTreeSaveDataManager` 维护解锁 / 完成状态并支持 JSON 序列化，可接入任意游戏存档系统。
-- 可选依赖：节点名 / 描述本地化经 Unity Localization 可选启用（`HAS_LOCALIZATION`）；悬停弹窗缓动经 DOTween 可选启用（`DOTWEEN`）；对象池基于底层包 `com.ale.toolkit`。
+- 底层集成：节点名 / 描述本地化经底层包 `com.ale.toolkit` 的 `AttributeValue`(Text) 承载（项目启用 toolkit 的 `ATK_LOCALIZATION` 时取多语文本，否则纯文本回退，本插件无需本地化宏）；悬停弹窗淡入淡出基于 `com.ale.toolkit` 中央 Tween；对象池基于 `com.ale.toolkit`。
 
 ---
 
@@ -63,7 +63,7 @@
 | `conditionSatisfyType` | `EConditionSatisfyType`（`All` = AND / `Any` = OR），决定各条件组的组合逻辑 |
 | `conditionGroups` | `List<ConditionGroupData>`，解锁条件（多组、组内多条） |
 | `uiIcon` | 节点图标（`Sprite`） |
-| `localizeNodeName` / `localizeNodeDesc` | 本地化名称 / 描述（`LocalizedString`，需 `HAS_LOCALIZATION`） |
+| `nodeName` / `nodeDesc` | 节点名称 / 描述（`com.ale.toolkit` 的 `AttributeValue`(Text)：纯文本 + 可选本地化引用；`ResolveText()` 优先取本地化、回退纯文本） |
 | `position` | 画布像素坐标 |
 | `customDataList` | `List<NodeCustomData>`，任意键值对，供其他系统挂载扩展数据 |
 | `childNodeIds` | 子节点 ID 列表（构成树 / 图结构） |
@@ -166,7 +166,7 @@ mgr.DeserializeFromJson(json);
 
 ### `UINodeBase`
 
-节点 UI 基类（`MonoBehaviour` + `IPoolable` + 指针事件）。挂到节点 UI 预制体上，由 `UINodeTreeWindow` 通过对象池生成并绑定数据。功能：节点图标显示、本地化名称 / 描述绑定（`HAS_LOCALIZATION`）、鼠标悬停信息弹窗淡入淡出（`DOTWEEN` 时带缓动）、点击回调。
+节点 UI 基类（`MonoBehaviour` + `IPoolable` + 指针事件）。挂到节点 UI 预制体上，由 `UINodeTreeWindow` 通过对象池生成并绑定数据。功能：节点图标显示、名称 / 描述文本（`AttributeValue.ResolveText()` 解析，填充 `TMP_Text`）、鼠标悬停信息弹窗淡入淡出（基于 `com.ale.toolkit` 中央 Tween）、点击回调。
 
 **可重写虚方法与事件**：
 
@@ -202,8 +202,8 @@ URP 透明**流光连线** Shader：主纹理 + 流动纹理 UV 滚动、边缘�
 ## 集成与依赖
 
 - **`com.ale.toolkit`**（必需）：运行时 UI 的对象池化基于 `ToolkitPool` / `ToolkitGameObjectPool` / `IPoolable`。
-- **Unity Localization**（可选，`HAS_LOCALIZATION`）：启用后节点名 / 描述使用 `LocalizedString` + `LocalizeStringEvent`；未启用时相关字段与逻辑自动跳过。
-- **DOTween**（可选，`DOTWEEN`）：启用后悬停信息弹窗带淡入淡出缓动；未启用时即时显隐。
+- **本地化**（经 `com.ale.toolkit`）：节点名 / 描述用 `AttributeValue`(Text) 承载（纯文本 + 可选本地化表/条目引用）。项目启用 toolkit 的 `ATK_LOCALIZATION` 宏时 `ResolveText()` 优先取多语文本，否则回退纯文本；本插件自身无需本地化宏、也不直接依赖 `Unity.Localization`。
+- **悬停弹窗淡入淡出**（内置）：基于 `com.ale.toolkit` 的中央 Tween（`ToolkitTween.FadeCanvasGroup`），始终可用，无需 DOTween。
 - **URP**：连线流光 Shader 基于通用渲染管线。
 
 > 安装与环境要求见[项目根目录 README](../../README.md)。

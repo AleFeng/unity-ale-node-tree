@@ -13,7 +13,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 - 高性能ランタイム：ノードタイプ別のオブジェクトプール、ビューポートカリングによるオンデマンド Spawn / Despawn、ライン Mesh のバッチ化でドローコール削減。
 - 拡張可能な条件：`INodeConditionChecker` を実装すればカスタム解放条件を追加可能。組み込みで「解放済み / 完了済み」の 2 チェッカー。
 - セーブ連携：`NodeTreeSaveDataManager` が解放 / 完了状態を管理し JSON シリアライズに対応。任意のセーブシステムに組み込み可能。
-- オプション依存：ノード名 / 説明のローカライズは Unity Localization（`HAS_LOCALIZATION`）で任意有効化。ホバーポップアップのイージングは DOTween（`DOTWEEN`）で任意。オブジェクトプールは基盤パッケージ `com.ale.toolkit` を利用。
+- 基盤統合：ノード名 / 説明のローカライズは基盤パッケージ `com.ale.toolkit` の `AttributeValue`(Text) が担う（プロジェクトが toolkit の `ATK_LOCALIZATION` を有効化すると多言語テキスト、無効時はプレーンテキストにフォールバック。本プラグインにローカライズマクロは不要）。ホバーポップアップのフェードは `com.ale.toolkit` の中央 Tween。オブジェクトプールは `com.ale.toolkit` を利用。
 
 ---
 
@@ -63,7 +63,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 | `conditionSatisfyType` | 条件グループ間の `EConditionSatisfyType`（`All` = AND / `Any` = OR） |
 | `conditionGroups` | `List<ConditionGroupData>`、解放条件（複数グループ・各グループ複数条件） |
 | `uiIcon` | ノードアイコン（`Sprite`） |
-| `localizeNodeName` / `localizeNodeDesc` | ローカライズ名 / 説明（`LocalizedString`、`HAS_LOCALIZATION` が必要） |
+| `nodeName` / `nodeDesc` | ノード名 / 説明（`com.ale.toolkit` の `AttributeValue`(Text)：プレーンテキスト + 任意のローカライズ参照。`ResolveText()` はローカライズ優先・プレーンにフォールバック） |
 | `position` | キャンバスのピクセル座標 |
 | `customDataList` | `List<NodeCustomData>`、任意のキー / 値ペア。他システム用の拡張データ |
 | `childNodeIds` | 子ノード ID リスト（ツリー / グラフ構造を構成） |
@@ -166,7 +166,7 @@ mgr.DeserializeFromJson(json);
 
 ### `UINodeBase`
 
-ノード UI 基底クラス（`MonoBehaviour` + `IPoolable` + ポインタイベント）。ノード UI プレハブにアタッチし、`UINodeTreeWindow` がプール経由で生成・バインドします。機能：ノードアイコン表示、ローカライズ名 / 説明のバインド（`HAS_LOCALIZATION`）、マウスホバー時の情報ポップアップのフェード（`DOTWEEN` 時はイージング付き）、クリックコールバック。
+ノード UI 基底クラス（`MonoBehaviour` + `IPoolable` + ポインタイベント）。ノード UI プレハブにアタッチし、`UINodeTreeWindow` がプール経由で生成・バインドします。機能：ノードアイコン表示、名前 / 説明テキスト（`AttributeValue.ResolveText()` で解決し `TMP_Text` に反映）、マウスホバー時の情報ポップアップのフェード（`com.ale.toolkit` の中央 Tween ベース）、クリックコールバック。
 
 **オーバーライド可能な仮想メソッド / イベント**：
 
@@ -202,11 +202,11 @@ URP 透明の**流光ライン**シェーダー：メインテクスチャ + フ
 ## 連携と依存
 
 - **`com.ale.toolkit`**（必須）：ランタイム UI のプール化は `ToolkitPool` / `ToolkitGameObjectPool` / `IPoolable` に基づきます。
-- **Unity Localization**（任意、`HAS_LOCALIZATION`）：有効時、ノード名 / 説明は `LocalizedString` + `LocalizeStringEvent` を使用。無効時は該当フィールドとロジックをスキップ。
-- **DOTween**（任意、`DOTWEEN`）：有効時、ホバー情報ポップアップがフェードイン / アウト。無効時は即時表示 / 非表示。
+- **ローカライズ**（`com.ale.toolkit` 経由）：ノード名 / 説明は `AttributeValue`(Text) が担う（プレーンテキスト + 任意のローカライズ表/エントリ参照）。プロジェクトが toolkit の `ATK_LOCALIZATION` マクロを有効化すると `ResolveText()` は多言語テキストを優先、無効時はプレーンにフォールバック。本プラグイン自体にローカライズマクロは不要で、`Unity.Localization` に直接依存しません。
+- **ホバーポップアップのフェード**（内蔵）：`com.ale.toolkit` の中央 Tween（`ToolkitTween.FadeCanvasGroup`）ベース。常に利用可能で、DOTween は不要。
 - **URP**：流光ラインシェーダーは Universal Render Pipeline 対応。
 
-> インストールと動作環境は[プロジェクトルート README](../../README.md) を参照してください。
+> インストールと動作環境は[プロジェクトルート README](../../README_JA.md) を参照してください。
 
 ---
 

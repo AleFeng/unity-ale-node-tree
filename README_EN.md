@@ -50,7 +50,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 2. **Data-driven unlocking** — each node can hold multiple condition groups (AND / OR across groups, AND / OR within a group); evaluation is delegated to checkers registered with `NodeConditionManager`; built-in "unlocked / finished" checkers, and a custom rule is just one interface away.
 3. **High-performance runtime** — runtime UI is pooled per node type, Spawned / Despawned on demand via viewport culling, and line meshes are batched per type to cut draw calls; a URP flowing-line shader is included.
 4. **Save-friendly** — `NodeTreeSaveDataManager` tracks unlocked / finished state with JSON serialization; `GetSaveData` / `SetSaveData` plug into any game save system.
-5. **No business hard-dependencies** — localization (Unity Localization) and hover-popup easing (DOTween) are optional via compile macros; object pooling reuses the base package `com.ale.toolkit`.
+5. **Built on the base package, not hard-bound** — node name / description localization is carried by `com.ale.toolkit`'s `AttributeValue`(Text) (localized when the project enables toolkit's `ATK_LOCALIZATION`, otherwise plain-text fallback; the plugin itself needs no localization macro); the hover popup fade in/out is built in (via `com.ale.toolkit`'s central tween); object pooling reuses `com.ale.toolkit`.
 
 ### Features
 | Feature | Description |
@@ -61,17 +61,17 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 | High-performance runtime UI | Object pooling per node type (via `com.ale.toolkit`), on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls. |
 | URP flowing lines | `NodeTree/NodeLineFlow` transparent flow shader (flow texture / edge fade / glow / HDR color); line style is configured per node type. |
 | Save-friendly | `NodeTreeSaveDataManager` tracks unlocked / finished state, JSON serialization, `GetSaveData` / `SetSaveData` for external saves. |
-| Optional dependencies | Node name / description localization (`HAS_LOCALIZATION` / Unity Localization) and hover-popup easing (`DOTWEEN` / DOTween) are optional; the core has no business hard-dependencies. |
+| Base-package integration | Node name / description localization via `com.ale.toolkit`'s `AttributeValue`(Text) (multilingual when `ATK_LOCALIZATION` is on, else plain text); hover popup fade via `com.ale.toolkit`'s central tween; object pooling via `com.ale.toolkit`. The plugin itself has no localization / DOTween macro. |
 
 ### Modules
 | Module | Responsibility | Key types |
 | --- | --- | --- |
 | **Config** | Node-tree config asset | `NodeTreeData` |
-| **Data** | Node / type / condition / custom data | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData` |
+| **Data** | Node / type / condition / custom data | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData`, `NodeConditionTypeData`, `NodeCustomData` |
 | **Conditions** | Unlock evaluation & extension | `INodeConditionChecker`, `NodeConditionManager` |
 | **Save** | Unlocked / finished state | `NodeTreeSaveDataManager` |
 | **Runtime UI** | Node-tree presentation | `UINodeTreeWindow`, `UINodeBase`, `NodeLineBuilder` |
-| **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState` |
+| **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 
 > See the [documentation](#-documentation) for each module's fields, API, and usage.
 
@@ -79,7 +79,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 - `Unity 2022.3` or newer (the minimum declared in `package.json`; this repo is developed and maintained on `Unity 6000.3`).
 - **Universal Render Pipeline (URP)**: the flowing-line shader `NodeTree/NodeLineFlow` targets URP.
 - **Required dependency [`com.ale.toolkit`](https://github.com/AleFeng/unity-ale-toolkit)**: runtime UI pooling builds on its `ToolkitPool` / `ToolkitGameObjectPool` / `IPoolable`.
-- Optional: **Unity Localization** (`HAS_LOCALIZATION`, node name / description localization) and **DOTween** (`DOTWEEN`, hover-popup easing) — when disabled, the related logic is skipped and the plugin works normally.
+- Base-package integration: node name / description localization is carried by **`com.ale.toolkit`**'s `AttributeValue`(Text) — multilingual when the project enables toolkit's `ATK_LOCALIZATION`, otherwise plain-text fallback (the plugin itself needs no localization macro); the hover popup fade in/out is built in (via `com.ale.toolkit`'s central tween, no DOTween needed).
 
 ## 📦 Installation
 
@@ -130,7 +130,7 @@ using Ale.NodeTree.Runtime;
 nodeTreeWindow.InitTree();
 
 // Subscribe to node clicks (UINodeBase.Clicked)
-someNodeUI.Clicked += ui => Debug.Log($"Clicked node {ui.NodeData.nodeId}");
+someNodeUI.Clicked += ui => Debug.Log($"Clicked node {ui.nodeData.nodeId}");
 ```
 
 **4. Conditions and saving**

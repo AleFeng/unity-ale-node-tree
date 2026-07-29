@@ -50,7 +50,7 @@ Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラ�
 2. **データ駆動の解放** —— 各ノードは複数の条件グループ（グループ間 AND / OR、グループ内 AND / OR）を保持でき、判定は `NodeConditionManager` に登録したチェッカーに委譲。組み込みで「解放済み / 完了済み」チェッカーを備え、カスタムルールはインターフェイス 1 つで追加可能。
 3. **高性能ランタイム** —— ランタイム UI はノードタイプ別にプール化し、ビューポートカリングでオンデマンドに Spawn / Despawn。接続線 Mesh はタイプごとにバッチ化してドローコールを削減。URP 流光ラインシェーダーを同梱。
 4. **セーブ連携が容易** —— `NodeTreeSaveDataManager` が解放 / 完了状態を管理し JSON シリアライズに対応。`GetSaveData` / `SetSaveData` で任意のゲームセーブシステムに接続。
-5. **業務への強い依存なし** —— ローカライズ（Unity Localization）とホバーポップアップのイージング（DOTween）はコンパイルマクロで任意有効化。オブジェクトプールは基盤パッケージ `com.ale.toolkit` を再利用。
+5. **基盤パッケージに統合、ハード依存なし** —— ノード名 / 説明のローカライズは基盤 `com.ale.toolkit` の `AttributeValue`(Text) が担う（プロジェクトが toolkit の `ATK_LOCALIZATION` を有効化すると多言語テキスト、無効時はプレーンテキストにフォールバック。プラグイン自体にローカライズマクロは不要）。ホバーポップアップのフェードは内蔵（`com.ale.toolkit` の中央 Tween ベース）。オブジェクトプールは `com.ale.toolkit` を再利用。
 
 ### 特徴
 | 特徴 | 説明 |
@@ -61,17 +61,17 @@ Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラ�
 | 高性能ランタイム UI | ノードタイプ別オブジェクトプール（`com.ale.toolkit` ベース）、ビューポートカリングでオンデマンド Spawn / Despawn、ライン Mesh バッチ化でドローコール削減。 |
 | URP 流光ライン | `NodeTree/NodeLineFlow` 透明流光シェーダー（フローテクスチャ / エッジフェード / グロー / HDR カラー）。ノードタイプごとにライン様式を設定。 |
 | セーブ連携 | `NodeTreeSaveDataManager` が解放 / 完了状態を管理、JSON シリアライズ、`GetSaveData` / `SetSaveData` で外部セーブに接続。 |
-| オプション依存 | ノード名 / 説明のローカライズ（`HAS_LOCALIZATION` / Unity Localization）、ホバーポップアップのイージング（`DOTWEEN` / DOTween）はいずれも任意。コアは業務への強い依存なし。 |
+| 基盤統合 | ノード名 / 説明のローカライズは `com.ale.toolkit` の `AttributeValue`(Text)（`ATK_LOCALIZATION` 有効時は多言語、無効時はプレーンテキスト）。ホバーポップアップのフェードは `com.ale.toolkit` の中央 Tween。オブジェクトプールは `com.ale.toolkit`。プラグイン自体にローカライズ / DOTween マクロは不要。 |
 
 ### モジュール一覧
 | モジュール | 役割 | 主な型 |
 | --- | --- | --- |
 | **設定** | ノードツリー設定アセット | `NodeTreeData` |
-| **データ** | ノード / タイプ / 条件 / カスタムデータ | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData` |
+| **データ** | ノード / タイプ / 条件 / カスタムデータ | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData`、`NodeCustomData` |
 | **条件** | 解放判定と拡張 | `INodeConditionChecker`、`NodeConditionManager` |
 | **セーブ** | 解放済み / 完了済み状態 | `NodeTreeSaveDataManager` |
 | **ランタイム UI** | ノードツリー表示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
-| **エディタ** | ビジュアル編集 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState` |
+| **エディタ** | ビジュアル編集 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
 > 各モジュールのフィールド・API・使い方は[ドキュメント](#-ドキュメント)を参照。
 
@@ -79,7 +79,7 @@ Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラ�
 - `Unity 2022.3` 以降（`package.json` が宣言する最低バージョン。本リポジトリは `Unity 6000.3` で開発・保守）。
 - **Universal Render Pipeline（URP）**：流光ラインシェーダー `NodeTree/NodeLineFlow` は URP 対応。
 - **必須依存 [`com.ale.toolkit`](https://github.com/AleFeng/unity-ale-toolkit)**：ランタイム UI のプール化は `ToolkitPool` / `ToolkitGameObjectPool` / `IPoolable` に基づきます。
-- 任意：**Unity Localization**（`HAS_LOCALIZATION`、ノード名 / 説明のローカライズ）、**DOTween**（`DOTWEEN`、ホバーポップアップのイージング）—— 無効時は該当ロジックをスキップし、プラグインは通常どおり動作します。
+- 基盤統合：ノード名 / 説明のローカライズは **`com.ale.toolkit`** の `AttributeValue`(Text) が担う —— プロジェクトが toolkit の `ATK_LOCALIZATION` を有効化すると多言語テキスト、無効時はプレーンテキストにフォールバック（プラグイン自体にローカライズマクロは不要）。ホバーポップアップのフェードは内蔵（`com.ale.toolkit` の中央 Tween ベース、DOTween 不要）。
 
 ## 📦 インストール
 
@@ -130,7 +130,7 @@ using Ale.NodeTree.Runtime;
 nodeTreeWindow.InitTree();
 
 // ノードクリックを購読（UINodeBase.Clicked）
-someNodeUI.Clicked += ui => Debug.Log($"ノード {ui.NodeData.nodeId} をクリック");
+someNodeUI.Clicked += ui => Debug.Log($"ノード {ui.nodeData.nodeId} をクリック");
 ```
 
 **4. 解放条件とセーブ**

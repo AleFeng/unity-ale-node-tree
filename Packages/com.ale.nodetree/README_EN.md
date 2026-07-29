@@ -13,7 +13,7 @@ A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeD
 - High-performance runtime: object pooling per node type, on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls.
 - Extensible conditions: implement `INodeConditionChecker` for custom unlock rules; two built-in checkers ("unlocked / finished").
 - Save-friendly: `NodeTreeSaveDataManager` tracks unlocked / finished state with JSON serialization, pluggable into any game save system.
-- Optional dependencies: node name / description localization via Unity Localization (`HAS_LOCALIZATION`); hover-popup easing via DOTween (`DOTWEEN`); object pooling powered by the base package `com.ale.toolkit`.
+- Base-package integration: node name / description localization is carried by `com.ale.toolkit`'s `AttributeValue`(Text) (multilingual when the project enables toolkit's `ATK_LOCALIZATION`, otherwise plain-text fallback; this plugin needs no localization macro); the hover popup fade in/out uses `com.ale.toolkit`'s central tween; object pooling is powered by `com.ale.toolkit`.
 
 ---
 
@@ -63,7 +63,7 @@ A node instance stored in `NodeTreeData.nodes`.
 | `conditionSatisfyType` | `EConditionSatisfyType` (`All` = AND / `Any` = OR) across condition groups |
 | `conditionGroups` | `List<ConditionGroupData>`, unlock conditions (multiple groups, each with multiple conditions) |
 | `uiIcon` | Node icon (`Sprite`) |
-| `localizeNodeName` / `localizeNodeDesc` | Localized name / description (`LocalizedString`, requires `HAS_LOCALIZATION`) |
+| `nodeName` / `nodeDesc` | Node name / description (`com.ale.toolkit`'s `AttributeValue`(Text): plain text + optional localization reference; `ResolveText()` prefers localized, falls back to plain) |
 | `position` | Canvas pixel coordinates |
 | `customDataList` | `List<NodeCustomData>`, arbitrary key/value pairs for other systems |
 | `childNodeIds` | Child node IDs (forming the tree / graph) |
@@ -166,7 +166,7 @@ The runtime node-tree UI window (a standalone `MonoBehaviour`). Attach it to a U
 
 ### `UINodeBase`
 
-The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach it to node UI prefabs; `UINodeTreeWindow` spawns and binds them through the pool. Features: node icon display, localized name / description binding (`HAS_LOCALIZATION`), hover info-popup fade in/out (eased when `DOTWEEN`), and a click callback.
+The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach it to node UI prefabs; `UINodeTreeWindow` spawns and binds them through the pool. Features: node icon display, name / description text (resolved via `AttributeValue.ResolveText()` into `TMP_Text`), hover info-popup fade in/out (via `com.ale.toolkit`'s central tween), and a click callback.
 
 **Overridable virtuals & events**:
 
@@ -202,11 +202,11 @@ A URP transparent **flowing-line** shader: main texture + flow texture UV scroll
 ## Integration & dependencies
 
 - **`com.ale.toolkit`** (required): runtime UI pooling builds on `ToolkitPool` / `ToolkitGameObjectPool` / `IPoolable`.
-- **Unity Localization** (optional, `HAS_LOCALIZATION`): when enabled, node name / description use `LocalizedString` + `LocalizeStringEvent`; otherwise the related fields and logic are skipped.
-- **DOTween** (optional, `DOTWEEN`): when enabled, the hover info popup fades in/out; otherwise it toggles instantly.
+- **Localization** (via `com.ale.toolkit`): node name / description are carried by `AttributeValue`(Text) (plain text + optional localization table/entry reference). When the project enables toolkit's `ATK_LOCALIZATION` macro, `ResolveText()` prefers the localized string, otherwise it falls back to plain text; this plugin needs no localization macro and does not reference `Unity.Localization` directly.
+- **Hover popup fade** (built in): via `com.ale.toolkit`'s central tween (`ToolkitTween.FadeCanvasGroup`), always available, no DOTween required.
 - **URP**: the flowing-line shader targets the Universal Render Pipeline.
 
-> See the [project root README](../../README.md) for installation and requirements.
+> See the [project root README](../../README_EN.md) for installation and requirements.
 
 ---
 

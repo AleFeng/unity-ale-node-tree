@@ -50,7 +50,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 2. **数据驱动的解锁** —— 每个节点可配置多个条件组（组间 AND / OR、组内 AND / OR），条件判定交给注册到 `NodeConditionManager` 的检查器；内置「已解锁 / 已完成」检查器，自定义规则只需实现一个接口。
 3. **高性能运行时** —— 运行时 UI 按节点类型对象池化，视口裁剪按需 Spawn / Despawn，连线 Mesh 按类型合批以降低 DrawCall；配套 URP 流光连线 Shader。
 4. **易接入存档** —— `NodeTreeSaveDataManager` 维护解锁 / 完成状态并支持 JSON 序列化，`GetSaveData` / `SetSaveData` 对接任意游戏存档系统。
-5. **零硬绑定业务** —— 本地化（Unity Localization）与悬停弹窗缓动（DOTween）均经编译宏可选启用；对象池复用底层包 `com.ale.toolkit`。
+5. **底层集成，非硬绑定** —— 节点名 / 描述本地化由底层 `com.ale.toolkit` 的 `AttributeValue`(Text) 承载（项目启用 toolkit 的 `ATK_LOCALIZATION` 时取多语文本，否则纯文本回退，插件本身无需本地化宏）；悬停弹窗淡入淡出内置（基于 `com.ale.toolkit` 中央 Tween）；对象池复用 `com.ale.toolkit`。
 
 ### 项目特性
 | 特性 | 描述 |
@@ -61,17 +61,17 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | 高性能运行时 UI | 按节点类型对象池化（基于 `com.ale.toolkit`），视口裁剪按需 Spawn / Despawn，连线 Mesh 合批降 DrawCall。 |
 | URP 流光连线 | `NodeTree/NodeLineFlow` 透明流光 Shader（流动纹理 / 边缘渐变 / 辉光 / HDR 颜色），按节点类型独立配连线样式。 |
 | 存档友好 | `NodeTreeSaveDataManager` 维护解锁 / 完成状态，JSON 序列化，`GetSaveData` / `SetSaveData` 对接外部存档。 |
-| 可选依赖 | 节点名 / 描述本地化（`HAS_LOCALIZATION` / Unity Localization）、悬停弹窗缓动（`DOTWEEN` / DOTween）均可选；核心逻辑零业务硬依赖。 |
+| 底层集成 | 节点名 / 描述本地化经 `com.ale.toolkit` 的 `AttributeValue`(Text)（启用 `ATK_LOCALIZATION` 取多语、否则纯文本）；悬停弹窗淡入淡出基于 `com.ale.toolkit` 中央 Tween；对象池复用 `com.ale.toolkit`。插件本身无本地化 / DOTween 宏。 |
 
 ### 模块一览
 | 模块 | 职责 | 主要类型 |
 | --- | --- | --- |
 | **配置** | 节点树配置资产 | `NodeTreeData` |
-| **数据** | 节点 / 类型 / 条件 / 自定义数据 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData` |
+| **数据** | 节点 / 类型 / 条件 / 自定义数据 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData`、`NodeCustomData` |
 | **条件** | 解锁判定与扩展 | `INodeConditionChecker`、`NodeConditionManager` |
 | **存档** | 已解锁 / 已完成状态 | `NodeTreeSaveDataManager` |
 | **运行时 UI** | 节点树展示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
-| **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState` |
+| **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
 > 每个模块的字段、API 与用法见 [详细文档](#-详细文档)。
 
@@ -79,7 +79,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 - `Unity 2022.3` 或更新版本（`package.json` 声明的最低版本；本仓库基于 `Unity 6000.3` 开发与维护）。
 - **通用渲染管线（URP）**：连线流光 Shader `NodeTree/NodeLineFlow` 基于 URP。
 - **必需依赖 [`com.ale.toolkit`](https://github.com/AleFeng/unity-ale-toolkit)**：运行时 UI 的对象池化基于其 `ToolkitPool` / `ToolkitGameObjectPool` / `IPoolable`。
-- 可选：**Unity Localization**（`HAS_LOCALIZATION`，节点名 / 描述本地化）、**DOTween**（`DOTWEEN`，悬停弹窗缓动）——未启用时相关逻辑自动跳过，插件照常工作。
+- 底层集成：节点名 / 描述本地化经 **`com.ale.toolkit`** 的 `AttributeValue`(Text) 承载——项目启用 toolkit 的 `ATK_LOCALIZATION` 时取多语文本，否则纯文本回退（插件本身无需本地化宏）；悬停弹窗淡入淡出内置（基于 `com.ale.toolkit` 中央 Tween，无需 DOTween）。
 
 ## 📦 安装
 
@@ -130,7 +130,7 @@ using Ale.NodeTree.Runtime;
 nodeTreeWindow.InitTree();
 
 // 订阅节点点击（UINodeBase.Clicked）
-someNodeUI.Clicked += ui => Debug.Log($"点击了节点 {ui.NodeData.nodeId}");
+someNodeUI.Clicked += ui => Debug.Log($"点击了节点 {ui.nodeData.nodeId}");
 ```
 
 **4. 解锁条件与存档**
