@@ -122,13 +122,16 @@ namespace Ale.NodeTree.Runtime
             }
             else
             {
+                bool anyValid = false;
                 foreach (var c in group.conditions)
                 {
                     if (c == null) continue;
+                    anyValid = true;
                     if (NodeConditionManager.Instance.Check(c.conditionType, c.conditionParam, c.comparison, context))
                         return true;
                 }
-                return false;
+                // 组内条件全为 null（无有效条件）视为无限制，返回 true（与空组、All 组全空一致）；否则均不满足返回 false
+                return !anyValid;
             }
         }
 

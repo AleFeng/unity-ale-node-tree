@@ -20,11 +20,22 @@ namespace Ale.NodeTree.Runtime
         /// 下次访问 Instance 会重建并仅注册内置检查器（NodeUnlockedChecker / NodeFinishedChecker）。
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStatics() => _instance = null;
+        private static void ResetStatics()
+        {
+            _instance = null;
+#if UNITY_EDITOR
+            _warnedMissingTypes.Clear();
+#endif
+        }
 
         // 已注册的检查器字典，key = INodeConditionChecker.ConditionType
         private readonly Dictionary<string, INodeConditionChecker> _checkers
             = new Dictionary<string, INodeConditionChecker>();
+
+#if UNITY_EDITOR
+        // 编辑器下已告警过的未注册 conditionType（每个仅告警一次，避免每帧刷屏）。
+        private static readonly HashSet<string> _warnedMissingTypes = new HashSet<string>();
+#endif
 
         /// <summary>私有构造函数，自动注册内置条件检查器。</summary>
         private NodeConditionManager()
@@ -33,9 +44,19 @@ namespace Ale.NodeTree.Runtime
             Register(new NodeFinishedChecker());
         }
 
-        /// <summary>注册条件检查器，同类型会覆盖旧的检查器。</summary>
+        /// <summary>注册条件检查器，同类型会覆盖旧的检查器。checker 为 null 或其 ConditionType 为空时忽略并告警。</summary>
         public void Register(INodeConditionChecker checker)
         {
+            if (checker == null)
+            {
+                Debug.LogWarning("[NodeConditionManager] Register 传入 null，已忽略。");
+                return;
+            }
+            if (string.IsNullOrEmpty(checker.ConditionType))
+            {
+                Debug.LogWarning($"[NodeConditionManager] {checker.GetType().Name} 的 ConditionType 为空，已忽略。");
+                return;
+            }
             _checkers[checker.ConditionType] = checker;
         }
 
@@ -56,7 +77,15 @@ namespace Ale.NodeTree.Runtime
                           EConditionComparison comparison, object context)
         {
             if (string.IsNullOrEmpty(conditionType)) return true;
-            if (!_checkers.TryGetValue(conditionType, out var checker)) return true;
+            if (!_checkers.TryGetValue(conditionType, out var checker))
+            {
+#if UNITY_EDITOR
+                // 未注册（非空但找不到）通常是拼写错误或漏注册：默认视为满足，但每个类型告警一次以暴露误配。
+                if (_warnedMissingTypes.Add(conditionType))
+                    Debug.LogWarning($"[NodeConditionManager] 未注册的 conditionType「{conditionType}」，默认视为满足（true）。请检查是否漏注册对应的 INodeConditionChecker。");
+#endif
+                return true;
+            }
             return checker.Check(conditionParam, comparison, context);
         }
     }
