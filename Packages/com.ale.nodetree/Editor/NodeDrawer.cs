@@ -104,7 +104,7 @@ namespace Ale.NodeTree.Editor
                          : !string.IsNullOrEmpty(node.nodeId) ? node.nodeId
                          : "?";
 
-            var labelStyle = new GUIStyle(EditorStyles.miniLabel)
+            var labelStyle = _nodeLabelStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
                 wordWrap  = false,
@@ -313,6 +313,8 @@ namespace Ale.NodeTree.Editor
         // ── GL 填充/描边辅助 ──
 
         private static Material _glMat; // GL 绘制所用材质（Hidden/Internal-Colored），延迟初始化
+        private static GUIStyle _nodeLabelStyle; // 节点标签样式（缓存，避免每节点每帧新建）
+        private static Mesh     _lineMesh;       // 连线绘制复用的 Mesh（Clear+重填，避免每连线每帧 new/Destroy）
         private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
         private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
         private static readonly int Cull = Shader.PropertyToID("_Cull");
@@ -713,14 +715,15 @@ namespace Ale.NodeTree.Editor
 
             if (verts.Count == 0) return;
 
-            // 构建临时 Mesh 并通过 Graphics.DrawMeshNow 在像素坐标系中渲染
-            var mesh = new Mesh { hideFlags = HideFlags.HideAndDontSave };
+            // 复用单个缓存 Mesh（Clear + 重填），避免每连线每帧 new/DestroyImmediate 的原生对象开销
+            if (!_lineMesh) _lineMesh = new Mesh { hideFlags = HideFlags.HideAndDontSave };
+            var mesh = _lineMesh;
+            mesh.Clear();
             mesh.SetVertices(verts);
             mesh.SetUVs(0, uvs);
             mesh.SetTriangles(tris, 0);
 
-            // 通过 GetGLMat 设置颜色（利用 MaterialPropertyBlock 或直接写颜色到顶点颜色）
-            // GL 材质不支持逐实例颜色，将颜色写入顶点色供 Shader 使用
+            // 颜色写入顶点色（Hidden/Internal-Colored 依据顶点色着色，无需逐实例材质）
             var color  = colorOverride ?? Color.white;
             var colors = new Color[verts.Count];
             for (int i = 0; i < colors.Length; i++) colors[i] = color;
@@ -731,8 +734,6 @@ namespace Ale.NodeTree.Editor
             GetGLMat().SetPass(0);
             Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
             GL.PopMatrix();
-
-            Object.DestroyImmediate(mesh);
         }
 
         /// <summary>

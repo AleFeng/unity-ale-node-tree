@@ -16,12 +16,15 @@ namespace Ale.NodeTree.Editor
         /// 绘制自定义 Inspector 面板：顶部显示"在 Node Tree Editor 中编辑"按钮，
         /// 按钮下方绘制水平分割线，随后绘制默认 Inspector 字段。
         /// </summary>
+        // 缓存打开按钮样式，避免每次 OnInspectorGUI 重新分配 GUIStyle。
+        private static GUIStyle _btnStyle;
+
         public override void OnInspectorGUI()
         {
             var config = (NodeTreeData)target;
 
             // 顶部打开按钮（加粗、较大字号、固定高度）
-            var btnStyle = new GUIStyle(GUI.skin.button)
+            var btnStyle = _btnStyle ??= new GUIStyle(GUI.skin.button)
             {
                 fontSize    = 13,
                 fontStyle   = FontStyle.Bold,

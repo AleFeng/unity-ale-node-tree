@@ -46,6 +46,22 @@ namespace Ale.NodeTree.Editor
         private string _snapSelectedId;      // Layout 事件时快照的选中节点 ID
         private bool   _snapIsDragging;      // Layout 事件时快照的拖拽状态
         private int    _snapNodeTypeIdx = -1; // Layout 事件时快照的节点类型选中索引
+
+        // ── 缓存的 GUIStyle / 数组（避免每次 OnGUI 重新分配）──
+        private static readonly string[] LayoutDirLabels =
+            { "→ 左到右", "← 右到左", "↓ 上到下", "↑ 下到上" };
+        private static readonly ELayoutDirection[] LayoutDirValues =
+        {
+            ELayoutDirection.Left2Right,
+            ELayoutDirection.Right2Left,
+            ELayoutDirection.Top2Bottom,
+            ELayoutDirection.Bottom2Top
+        };
+        private GUIStyle _snapStyle;
+        private GUIStyle _warnLabelStyle;
+        private GUIStyle _redButtonStyle;
+        private GUIStyle _duplicateLabelStyle;
+        private GUIStyle _connectionHintStyle;
         
         /// <summary>通过菜单打开编辑器窗口（无配置文件预加载）。</summary>
         [MenuItem("Tools/NodeTree/Node Tree Editor")]
@@ -362,21 +378,13 @@ namespace Ale.NodeTree.Editor
 
                 if (_config)
                 {
-                    var dirs = new[] { "→ 左到右", "← 右到左", "↓ 上到下", "↑ 下到上" };
-                    var dirValues = new[]
-                    {
-                        ELayoutDirection.Left2Right,
-                        ELayoutDirection.Right2Left,
-                        ELayoutDirection.Top2Bottom,
-                        ELayoutDirection.Bottom2Top
-                    };
-                    int curIdx = Array.IndexOf(dirValues, _config.layoutDirection);
-                    int newIdx = GUILayout.Toolbar(curIdx < 0 ? 0 : curIdx, dirs, GUILayout.Width(260f));
+                    int curIdx = Array.IndexOf(LayoutDirValues, _config.layoutDirection);
+                    int newIdx = GUILayout.Toolbar(curIdx < 0 ? 0 : curIdx, LayoutDirLabels, GUILayout.Width(260f));
                     if (newIdx != curIdx)
                     {
                         Undo.RecordObject(_config, "修改布局方向");
                         var oldDir = _config.layoutDirection;
-                        _config.layoutDirection = dirValues[newIdx];
+                        _config.layoutDirection = LayoutDirValues[newIdx];
                         RotateNodesForLayoutChange(oldDir, _config.layoutDirection);
                         MarkDirty();
                     }
@@ -425,7 +433,7 @@ namespace Ale.NodeTree.Editor
 
                 GUILayout.Space(8f);
                 // 吸附网格开关：开启时拖拽始终吸附；关闭时按住 Shift 可临时吸附
-                var snapStyle = new GUIStyle(EditorStyles.toolbarButton);
+                var snapStyle = _snapStyle ??= new GUIStyle(EditorStyles.toolbarButton);
                 snapStyle.normal.textColor   = _snapToGrid ? new Color(0.2f, 0.85f, 0.2f) : new Color(0.5f, 0.5f, 0.5f);
                 snapStyle.onNormal.textColor = new Color(0.2f, 0.85f, 0.2f);
                 snapStyle.hover.textColor    = snapStyle.normal.textColor;
@@ -648,7 +656,7 @@ namespace Ale.NodeTree.Editor
             GUILayout.BeginHorizontal();
             GUILayout.Label("节点属性", EditorStyles.boldLabel, GUILayout.ExpandWidth(false));
             GUILayout.FlexibleSpace();
-            var warnLabelStyle = new GUIStyle(EditorStyles.miniLabel)
+            var warnLabelStyle = _warnLabelStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleRight,
                 wordWrap  = false,
@@ -724,7 +732,7 @@ namespace Ale.NodeTree.Editor
             }
 
             // ── 条件组列表 ──
-            var redButtonStyle = new GUIStyle(GUI.skin.button)
+            var redButtonStyle = _redButtonStyle ??= new GUIStyle(GUI.skin.button)
             {
                 normal = { textColor = new Color(1f, 0.3f, 0.3f) },
                 hover  = { textColor = new Color(1f, 0.6f, 0.6f) },
@@ -1150,7 +1158,7 @@ namespace Ale.NodeTree.Editor
             string text  = $"⚠  存在重复的节点名称 [{names}]，请进行修改（点击定位）";
 
             // 使用无背景的 Label 样式（背景由 DrawRect 单独绘制，避免 GUIStyle 纹理干扰）
-            var labelStyle = new GUIStyle(EditorStyles.miniLabel)
+            var labelStyle = _duplicateLabelStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleLeft,
                 wordWrap  = false,
@@ -1764,7 +1772,7 @@ namespace Ale.NodeTree.Editor
             if (!_snapIsAddingConnection) return;
 
             string text  = $"连线添加模式  起点: [{_snapConnectionSourceId}]  |  点击目标节点完成连线  |  Esc 取消";
-            var style    = new GUIStyle(EditorStyles.miniLabel)
+            var style    = _connectionHintStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
                 normal    = { textColor = new Color(1f, 0.9f, 0.2f, 1f) }
