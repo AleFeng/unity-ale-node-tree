@@ -31,7 +31,7 @@ namespace Ale.NodeTree.Editor
         // ── 数据 ──
         private NodeTreeData _config;                              // 当前编辑的节点树配置资产
         private NodeTreeCanvasState _canvas = new NodeTreeCanvasState(); // 画布交互状态（平移/缩放/选中/拖拽）
-        // ── 持久化键（PlayerPrefs） ──
+        // ── 持久化键（EditorPrefs：编辑器窗口状态，不污染游戏 PlayerPrefs） ──
         private const string PrefKeyConfigPath = "NodeTreeSystem.ConfigPath"; // 上次打开的配置文件资产路径
         private const string PrefKeyPanX       = "NodeTreeSystem.PanX";      // 画布平移 X 分量
         private const string PrefKeyPanY       = "NodeTreeSystem.PanY";      // 画布平移 Y 分量
@@ -65,7 +65,7 @@ namespace Ale.NodeTree.Editor
             if (config)
             {
                 window._config = config;
-                PlayerPrefs.SetString(PrefKeyConfigPath, AssetDatabase.GetAssetPath(config));
+                EditorPrefs.SetString(PrefKeyConfigPath, AssetDatabase.GetAssetPath(config));
                 window.RebuildLists();
             }
             window.Show();
@@ -93,20 +93,20 @@ namespace Ale.NodeTree.Editor
         }
         
         // ── 生命周期 ──
-        /// <summary>窗口启用时从 PlayerPrefs 恢复画布状态，并尝试加载上次打开的配置文件。</summary>
+        /// <summary>窗口启用时从 EditorPrefs 恢复画布状态，并尝试加载上次打开的配置文件。</summary>
         private void OnEnable()
         {
             // 恢复画布状态
             _canvas.PanOffset = new Vector2(
-                PlayerPrefs.GetFloat(PrefKeyPanX, 0f),
-                PlayerPrefs.GetFloat(PrefKeyPanY, 0f));
-            _canvas.Zoom = PlayerPrefs.GetFloat(PrefKeyZoom, 1f);
+                EditorPrefs.GetFloat(PrefKeyPanX, 0f),
+                EditorPrefs.GetFloat(PrefKeyPanY, 0f));
+            _canvas.Zoom = EditorPrefs.GetFloat(PrefKeyZoom, 1f);
             _canvas.Zoom = Mathf.Clamp(_canvas.Zoom, NodeTreeCanvasState.MinZoom, NodeTreeCanvasState.MaxZoom);
             wantsMouseMove = true; // 鼠标移动时触发事件，用于连线悬停检测
             Undo.undoRedoPerformed += OnUndoRedoPerformed;
 
             // 恢复上次打开的配置
-            string path = PlayerPrefs.GetString(PrefKeyConfigPath, "");
+            string path = EditorPrefs.GetString(PrefKeyConfigPath, "");
             if (!string.IsNullOrEmpty(path))
             {
                 _config = AssetDatabase.LoadAssetAtPath<NodeTreeData>(path);
@@ -114,13 +114,13 @@ namespace Ale.NodeTree.Editor
             }
         }
 
-        /// <summary>窗口禁用时将画布状态保存到 PlayerPrefs，并取消 Undo 回调订阅。</summary>
+        /// <summary>窗口禁用时将画布状态保存到 EditorPrefs，并取消 Undo 回调订阅。</summary>
         private void OnDisable()
         {
             Undo.undoRedoPerformed -= OnUndoRedoPerformed;
-            PlayerPrefs.SetFloat(PrefKeyPanX, _canvas.PanOffset.x);
-            PlayerPrefs.SetFloat(PrefKeyPanY, _canvas.PanOffset.y);
-            PlayerPrefs.SetFloat(PrefKeyZoom, _canvas.Zoom);
+            EditorPrefs.SetFloat(PrefKeyPanX, _canvas.PanOffset.x);
+            EditorPrefs.SetFloat(PrefKeyPanY, _canvas.PanOffset.y);
+            EditorPrefs.SetFloat(PrefKeyZoom, _canvas.Zoom);
         }
 
         /// <summary>
@@ -269,6 +269,8 @@ namespace Ale.NodeTree.Editor
                 RebuildTypeNameCache();
                 MarkDirty();
             };
+            // 拖拽重排：Undo 由 DoLayoutList 前的 RecordObject 覆盖，此处仅标脏保存。
+            _nodeTypeList.onReorderCallback = _ => MarkDirty();
 
             // 条件类型列表
             _conditionTypeList = new ReorderableList(_config.conditionTypes,
@@ -303,6 +305,8 @@ namespace Ale.NodeTree.Editor
                 RebuildTypeNameCache();
                 MarkDirty();
             };
+            // 拖拽重排：Undo 由 DoLayoutList 前的 RecordObject 覆盖，此处仅标脏保存。
+            _conditionTypeList.onReorderCallback = _ => MarkDirty();
 
             RebuildTypeNameCache();
             _needDuplicateCheck = true; // 加载新配置后重新检查重名
@@ -347,7 +351,7 @@ namespace Ale.NodeTree.Editor
                     _config = newConfig;
                     if (_config)
                     {
-                        PlayerPrefs.SetString(PrefKeyConfigPath,
+                        EditorPrefs.SetString(PrefKeyConfigPath,
                             AssetDatabase.GetAssetPath(_config));
                         RebuildLists();
                     }
@@ -547,10 +551,23 @@ namespace Ale.NodeTree.Editor
                     GUI.skin.scrollView))
                 {
                     _leftScroll = scroll.scrollPosition;
+                    // DoLayoutList 前记录 Undo：覆盖内联编辑与拖拽重排（每帧记录快照，实际改变时才生成撤销条目）。
                     if (_leftTab == 0)
-                        _nodeTypeList?.DoLayoutList();
+                    {
+                        if (_nodeTypeList != null)
+                        {
+                            if (_config) Undo.RecordObject(_config, "编辑节点类型列表");
+                            _nodeTypeList.DoLayoutList();
+                        }
+                    }
                     else
-                        _conditionTypeList?.DoLayoutList();
+                    {
+                        if (_conditionTypeList != null)
+                        {
+                            if (_config) Undo.RecordObject(_config, "编辑条件类型列表");
+                            _conditionTypeList.DoLayoutList();
+                        }
+                    }
                 }
             }
         }
@@ -651,6 +668,8 @@ namespace Ale.NodeTree.Editor
 
             EditorGUILayout.Space(4f);
 
+            // 记录 Undo（每次绘制记录快照，实际改变时才生成撤销条目），使右侧面板节点编辑可撤销。
+            Undo.RecordObject(_config, "编辑节点属性");
             EditorGUI.BeginChangeCheck();
 
             // ID（修改时须保证在配置内唯一；重复时阻止写入并记录警告，有效时同步更新所有引用）
@@ -859,6 +878,8 @@ namespace Ale.NodeTree.Editor
             EditorGUILayout.LabelField("节点类型", EditorStyles.boldLabel);
             EditorGUILayout.Space(4f);
 
+            // 记录 Undo，使右侧面板类型属性编辑可撤销。
+            Undo.RecordObject(_config, "编辑节点类型属性");
             EditorGUI.BeginChangeCheck();
 
             type.typeName = EditorGUILayout.TextField("类型名称", type.typeName);
@@ -1345,7 +1366,7 @@ namespace Ale.NodeTree.Editor
             menu.AddItem(new GUIContent("切除子树（含所有子节点）"), false, () =>
             {
                 if (EditorUtility.DisplayDialog("切除子树",
-                        $"切除节点 [{_ctxNodeId}] 及其所有子节点？\n此操作不可撤销（尚未实现Undo）。", "切除", "取消"))
+                        $"切除节点 [{_ctxNodeId}] 及其所有子节点？\n可通过 Ctrl+Z 撤销。", "切除", "取消"))
                     CutSubtree(_ctxNodeId);
             });
             menu.ShowAsContext();
