@@ -12,6 +12,14 @@ Shader "NodeTree/NodeLineFlow"
         _EdgeFade   ("Edge Fade Width", Range(0.01, 1)) = 0.3
         _Glow       ("Glow Intensity", Float)     = 1.5
         _Alpha      ("Global Alpha", Range(0, 1)) = 1.0
+
+        // ── UI 遮罩（Mask 组件）支持 ──
+        _StencilComp      ("Stencil Comparison", Float) = 8
+        _Stencil          ("Stencil ID", Float)         = 0
+        _StencilOp        ("Stencil Operation", Float)  = 0
+        _StencilWriteMask ("Stencil Write Mask", Float) = 255
+        _StencilReadMask  ("Stencil Read Mask", Float)  = 255
+        _ColorMask        ("Color Mask", Float)         = 15
     }
 
     SubShader
@@ -26,6 +34,19 @@ Shader "NodeTree/NodeLineFlow"
         Blend SrcAlpha OneMinusSrcAlpha
         ZWrite Off
         Cull Off
+        ZTest [unity_GUIZTestMode]
+        ColorMask [_ColorMask]
+
+        // UI 遮罩（Mask 组件）裁剪：按模板缓冲测试，使连线仅在 Mask 区域内可见。
+        // 默认 Comp=Always(8) / Ref=0 时不裁剪，与无 Mask 场景表现一致。
+        Stencil
+        {
+            Ref       [_Stencil]
+            Comp      [_StencilComp]
+            Pass      [_StencilOp]
+            ReadMask  [_StencilReadMask]
+            WriteMask [_StencilWriteMask]
+        }
 
         Pass
         {
@@ -35,7 +56,6 @@ Shader "NodeTree/NodeLineFlow"
             HLSLPROGRAM
             #pragma vertex   Vert
             #pragma fragment Frag
-            #pragma multi_compile_fog
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -65,7 +85,6 @@ Shader "NodeTree/NodeLineFlow"
             {
                 float4 positionHCS : SV_POSITION;
                 float2 uv          : TEXCOORD0;
-                float  fogFactor   : TEXCOORD1;
             };
 
             Varyings Vert(Attributes IN)
@@ -73,7 +92,6 @@ Shader "NodeTree/NodeLineFlow"
                 Varyings OUT;
                 OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
                 OUT.uv          = TRANSFORM_TEX(IN.uv, _MainTex);
-                OUT.fogFactor   = ComputeFogFactor(OUT.positionHCS.z);
                 return OUT;
             }
 
@@ -104,16 +122,13 @@ Shader "NodeTree/NodeLineFlow"
                 half alpha = edgeAlpha * mainTex.a * _FlowColor.a * _Alpha;
 
                 half4 finalColor = half4(col, alpha);
-
-                // Fog
-                finalColor.rgb = MixFog(finalColor.rgb, IN.fogFactor);
-
                 return finalColor;
             }
             ENDHLSL
         }
     }
 
-    // Built-in 回退（非 URP 项目中仍可编译，使用 Unlit 透明）
+    // 本 Shader 为 URP 专用（依赖 UniversalPipeline 与 URP ShaderLibrary）。
+    // 非 URP 管线下回退到 URP 错误占位（品红），以提示本 Shader 需要 URP。
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
 }
