@@ -36,6 +36,11 @@ namespace Ale.NodeTree.Runtime
         // 当前选中的节点 ID
         private string _selectedNodeId;
 
+        // 视口裁剪脏标记与上次刷新时的容器世界坐标 / 屏幕尺寸（用于按需刷新，避免每帧遍历全部节点）。
+        private bool    _visibilityDirty = true;
+        private Vector3 _lastContainerPos;
+        private Vector2 _lastScreenSize;
+
         // ── Unity 生命周期 ──
 
         private void Awake()
@@ -51,7 +56,21 @@ namespace Ale.NodeTree.Runtime
                 RebuildAllLineMeshes();
                 _lineMeshDirty = false;
             }
-            RefreshVisibility();
+
+            // 视口裁剪仅在容器移动/缩放（_nodeContainer 世界坐标变化）或屏幕尺寸变化时刷新，
+            // 静止时不再每帧遍历全部节点。
+            if (_nodeContainer)
+            {
+                Vector3 pos    = _nodeContainer.position;
+                Vector2 screen = new Vector2(Screen.width, Screen.height);
+                if (_visibilityDirty || pos != _lastContainerPos || screen != _lastScreenSize)
+                {
+                    RefreshVisibility();
+                    _lastContainerPos = pos;
+                    _lastScreenSize   = screen;
+                    _visibilityDirty  = false;
+                }
+            }
         }
 
         private void OnDestroy()
@@ -84,13 +103,15 @@ namespace Ale.NodeTree.Runtime
                 return;
             }
 
+            config.InvalidateLookup(); // 重建查找缓存，确保反映最新（或切换后的）配置数据
             ValidateConfig();
             EnsureContainers();
             CalcAndSetRootSize(); // 计算 sizeDelta 与节点偏移量（依赖 EnsureContainers 已执行）
             EnsureCamera();
             InitPools();
             InitLineMeshRenderers();
-            _lineMeshDirty = true;
+            _lineMeshDirty   = true;
+            _visibilityDirty = true; // 强制下一帧刷新一次可见性
         }
 
         /// <summary>

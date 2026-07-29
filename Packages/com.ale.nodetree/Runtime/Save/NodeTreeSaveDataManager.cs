@@ -37,41 +37,47 @@ namespace Ale.NodeTree.Runtime
 
         private NodeTreeSaveData _data = new NodeTreeSaveData(); // 当前运行时存档数据
 
+        // 与 _data 列表并行的 O(1) 查询集合（HashSet 不可序列化，仅运行时加速；随 _data 同步维护）。
+        private readonly HashSet<string> _unlockedSet = new HashSet<string>();
+        private readonly HashSet<string> _finishedSet = new HashSet<string>();
+
         // ── 状态查询 ──
 
         /// <summary>查询指定节点是否已解锁。</summary>
-        public bool IsNodeUnlocked(string nodeId) => _data.unlockedNodeIds.Contains(nodeId);
+        public bool IsNodeUnlocked(string nodeId) => _unlockedSet.Contains(nodeId);
 
         /// <summary>查询指定节点是否已完成。</summary>
-        public bool IsNodeFinished(string nodeId) => _data.finishedNodeIds.Contains(nodeId);
+        public bool IsNodeFinished(string nodeId) => _finishedSet.Contains(nodeId);
 
         // ── 状态修改 ──
 
-        /// <summary>设置指定节点的解锁状态。unlocked=true 时添加到列表，false 时从列表移除。</summary>
+        /// <summary>设置指定节点的解锁状态。unlocked=true 时添加，false 时移除（List 与 HashSet 同步）。</summary>
         public void SetNodeUnlocked(string nodeId, bool unlocked)
         {
             if (unlocked)
             {
-                if (!_data.unlockedNodeIds.Contains(nodeId))
+                if (_unlockedSet.Add(nodeId))       // 新增才追加，避免重复
                     _data.unlockedNodeIds.Add(nodeId);
             }
             else
             {
-                _data.unlockedNodeIds.Remove(nodeId);
+                if (_unlockedSet.Remove(nodeId))
+                    _data.unlockedNodeIds.Remove(nodeId);
             }
         }
 
-        /// <summary>设置指定节点的完成状态。finished=true 时添加到列表，false 时从列表移除。</summary>
+        /// <summary>设置指定节点的完成状态。finished=true 时添加，false 时移除（List 与 HashSet 同步）。</summary>
         public void SetNodeFinished(string nodeId, bool finished)
         {
             if (finished)
             {
-                if (!_data.finishedNodeIds.Contains(nodeId))
+                if (_finishedSet.Add(nodeId))
                     _data.finishedNodeIds.Add(nodeId);
             }
             else
             {
-                _data.finishedNodeIds.Remove(nodeId);
+                if (_finishedSet.Remove(nodeId))
+                    _data.finishedNodeIds.Remove(nodeId);
             }
         }
 
@@ -102,6 +108,16 @@ namespace Ale.NodeTree.Runtime
                 _data.unlockedNodeIds.AddRange(data.unlockedNodeIds);
             if (data.finishedNodeIds != null)
                 _data.finishedNodeIds.AddRange(data.finishedNodeIds);
+            RebuildSets();
+        }
+
+        // 从 _data 列表重建查询集合（SetSaveData / 反序列化后调用，使 HashSet 与 List 一致）。
+        private void RebuildSets()
+        {
+            _unlockedSet.Clear();
+            _finishedSet.Clear();
+            foreach (var id in _data.unlockedNodeIds) _unlockedSet.Add(id);
+            foreach (var id in _data.finishedNodeIds) _finishedSet.Add(id);
         }
 
         // ── JSON 序列化辅助 ──
@@ -124,6 +140,8 @@ namespace Ale.NodeTree.Runtime
         public void Reset()
         {
             _data = new NodeTreeSaveData();
+            _unlockedSet.Clear();
+            _finishedSet.Clear();
         }
     }
 }

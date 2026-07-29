@@ -24,19 +24,77 @@ namespace Ale.NodeTree.Runtime
         public ELayoutDirection layoutDirection = ELayoutDirection.Left2Right; // 编辑器画布的整体布局方向
         public float zoom = 1.0f;                                              // 编辑器画布的当前缩放比例（由编辑器写入，运行时不使用）
 
+        // 运行时查找缓存（O(1)）：仅在 Play 模式使用；编辑期走线性查找以实时反映编辑。
+        // Dictionary 不可序列化，作为普通运行时字段存在（不占资产序列化）。
+        private Dictionary<string, NodeData>     _nodeLookup;
+        private Dictionary<string, NodeTypeData> _typeLookup;
+
         /// <summary>通过 nodeId 查找节点实例，未找到返回 null。</summary>
         public NodeData GetNode(string nodeId)
         {
-            foreach (var node in nodes)
-                if (node.nodeId == nodeId) return node;
-            return null;
+            if (nodeId == null) return null;
+#if UNITY_EDITOR
+            if (!Application.isPlaying) return FindNodeLinear(nodeId);
+#endif
+            if (_nodeLookup == null) BuildNodeLookup();
+            return _nodeLookup.TryGetValue(nodeId, out var node) ? node : null;
         }
 
         /// <summary>通过 typeName 查找节点类型定义，未找到返回 null。</summary>
         public NodeTypeData GetNodeType(string typeName)
         {
+            if (typeName == null) return null;
+#if UNITY_EDITOR
+            if (!Application.isPlaying) return FindTypeLinear(typeName);
+#endif
+            if (_typeLookup == null) BuildTypeLookup();
+            return _typeLookup.TryGetValue(typeName, out var type) ? type : null;
+        }
+
+        /// <summary>
+        /// 使运行时查找缓存失效（下次 GetNode/GetNodeType 重建）。
+        /// 由 UINodeTreeWindow.InitTree 在（重新）初始化时调用，确保缓存反映最新数据。
+        /// </summary>
+        public void InvalidateLookup()
+        {
+            _nodeLookup = null;
+            _typeLookup = null;
+        }
+
+        private void BuildNodeLookup()
+        {
+            _nodeLookup = new Dictionary<string, NodeData>(nodes.Count);
+            foreach (var node in nodes)
+            {
+                if (node == null || node.nodeId == null) continue;
+                // 重复 ID 保留第一个，与原线性查找语义一致。
+                if (!_nodeLookup.ContainsKey(node.nodeId))
+                    _nodeLookup.Add(node.nodeId, node);
+            }
+        }
+
+        private void BuildTypeLookup()
+        {
+            _typeLookup = new Dictionary<string, NodeTypeData>(nodeTypes.Count);
             foreach (var type in nodeTypes)
-                if (type.typeName == typeName) return type;
+            {
+                if (type == null || type.typeName == null) continue;
+                if (!_typeLookup.ContainsKey(type.typeName))
+                    _typeLookup.Add(type.typeName, type);
+            }
+        }
+
+        private NodeData FindNodeLinear(string nodeId)
+        {
+            foreach (var node in nodes)
+                if (node != null && node.nodeId == nodeId) return node;
+            return null;
+        }
+
+        private NodeTypeData FindTypeLinear(string typeName)
+        {
+            foreach (var type in nodeTypes)
+                if (type != null && type.typeName == typeName) return type;
             return null;
         }
 
