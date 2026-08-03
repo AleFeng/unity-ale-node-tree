@@ -427,33 +427,7 @@ namespace Ale.NodeTree.Editor
                     ZoomBy(0.1f);
                 if (GUILayout.Button("重置", GUILayout.Width(42f)))
                 {
-                    _canvas.Zoom = 1f;
-
-                    // 将视口中心对准开始节点（第一个根节点；若无根节点则取列表第一个节点）
-                    if (_config && _config.nodes.Count > 0)
-                    {
-                        var roots     = _config.GetRootNodes();
-                        var startNode = (roots != null && roots.Count > 0)
-                            ? roots[0]
-                            : _config.nodes[0];
-
-                        // 不使用 _canvasRect（DrawToolbar 先于 DrawCanvas 执行，
-                        // 点击事件发生时 _canvasRect 尚未被当前帧更新，宽高可能为 0）。
-                        // 改用 position（EditorWindow 窗口尺寸）和布局常量直接推算画布中心，
-                        // 这些值任何时刻都可靠。
-                        float canvasW = position.width  - LeftPanelWidth - RightPanelWidth;
-                        float canvasH = position.height - ToolbarHeight;
-                        var center    = new Vector2(canvasW * 0.5f, canvasH * 0.5f);
-
-                        // panOffset 使 CanvasToScreen(startNode.position) == 画布中心
-                        // 即：startNode.position * zoom + panOffset = center
-                        _canvas.PanOffset = center - startNode.position * _canvas.Zoom;
-                    }
-                    else
-                    {
-                        _canvas.PanOffset = Vector2.zero;
-                    }
-
+                    ResetViewport(); // 缩放归 1 + 视口对准起始节点（逻辑抽出，与画布右键菜单复用）
                     Repaint();
                 }
 
@@ -491,6 +465,151 @@ namespace Ale.NodeTree.Editor
             GUILayout.FlexibleSpace();
         }
         
+        #region 视口导航 / 画布右键菜单
+
+        private Vector2 _ctxCanvasPos; // 画布右键菜单打开时的画布坐标（用于「在此处新建节点」）
+
+        /// <summary>
+        /// 计算当前画布视口的像素尺寸。不使用 _canvasRect（Layout/工具栏阶段其宽高可能为 0），
+        /// 改用窗口尺寸 position 与布局常量推算，任何时刻都可靠。
+        /// </summary>
+        private Vector2 GetCanvasViewSize()
+            => new Vector2(
+                Mathf.Max(1f, position.width  - LeftPanelWidth - RightPanelWidth),
+                Mathf.Max(1f, position.height - ToolbarHeight));
+
+        /// <summary>取起始节点：第一个根节点；无根节点则取列表首个；空树返回 null。</summary>
+        private NodeData GetStartNode()
+        {
+            if (!_config || _config.nodes.Count == 0) return null;
+            var roots = _config.GetRootNodes();
+            return (roots != null && roots.Count > 0) ? roots[0] : _config.nodes[0];
+        }
+
+        /// <summary>
+        /// 平移画布使指定画布坐标点对准视口中心（不改变缩放）。
+        /// 令 CanvasToScreen(canvasPos) == 视口中心（X/Y 皆成立，Y 轴翻转在公式内自洽）。
+        /// </summary>
+        private void CenterOn(Vector2 canvasPos)
+        {
+            var view   = GetCanvasViewSize();
+            var center = new Vector2(view.x * 0.5f, view.y * 0.5f);
+            _canvas.PanOffset = center - canvasPos * _canvas.Zoom;
+        }
+
+        /// <summary>重置视口：缩放归 1，并将视口中心对准起始节点（空树则归零平移）。</summary>
+        private void ResetViewport()
+        {
+            _canvas.Zoom = 1f;
+            var start = GetStartNode();
+            if (start != null) CenterOn(start.position);
+            else               _canvas.PanOffset = Vector2.zero;
+        }
+
+        /// <summary>缩放并平移视口，使所有节点恰好框入视口（四周留白）。空树等同重置视口。</summary>
+        private void FrameAllNodes()
+        {
+            if (GetStartNode() == null) { ResetViewport(); return; }
+
+            // 求所有节点的画布包围盒（按各自尺寸的半宽/半高外扩，含节点整体而非仅中心）
+            float minX = float.MaxValue, minY = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue;
+            foreach (var node in _config.nodes)
+            {
+                if (node == null) continue;
+                var type     = _config.GetNodeType(node.nodeTypeRef);
+                Vector2 half = (type != null ? type.resolution : new Vector2(80f, 80f)) * 0.5f;
+                minX = Mathf.Min(minX, node.position.x - half.x);
+                maxX = Mathf.Max(maxX, node.position.x + half.x);
+                minY = Mathf.Min(minY, node.position.y - half.y);
+                maxY = Mathf.Max(maxY, node.position.y + half.y);
+            }
+            if (minX > maxX || minY > maxY) { ResetViewport(); return; }
+
+            float boxW = Mathf.Max(1f, maxX - minX);
+            float boxH = Mathf.Max(1f, maxY - minY);
+            var   view = GetCanvasViewSize();
+
+            const float fill = 0.9f; // 留白系数：四周各留约 5%
+            float zoom = Mathf.Min(view.x / boxW, view.y / boxH) * fill;
+            _canvas.Zoom = Mathf.Clamp(zoom, NodeTreeCanvasState.MinZoom, NodeTreeCanvasState.MaxZoom);
+            CenterOn(new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f));
+        }
+
+        /// <summary>
+        /// 在指定画布坐标新建一个独立节点（无父链、无解锁条件）：
+        /// 生成唯一 ID、默认类型取 nodeTypes[0]，加入配置并选中。参照 <see cref="AddChildNode"/>。
+        /// </summary>
+        private void AddNodeAt(Vector2 canvasPos)
+        {
+            if (!_config) return;
+
+            Undo.RecordObject(_config, "新建节点");
+
+            string typeRef = (_config.nodeTypes != null && _config.nodeTypes.Count > 0)
+                ? _config.nodeTypes[0].typeName
+                : null;
+
+            var newNode = new NodeData
+            {
+                nodeId      = GenerateStandaloneId(),
+                nodeTypeRef = typeRef,
+                position    = canvasPos
+            };
+            newNode.RebuildTagRules(_config);
+
+            _config.nodes.Add(newNode);
+            _canvas.SelectedNodeId = newNode.nodeId;
+            _selectedNodeTypeIdx   = -1;
+            MarkDirty();
+        }
+
+        /// <summary>生成独立节点的唯一 ID（基名「节点」，冲突时追加序号）。</summary>
+        private string GenerateStandaloneId()
+        {
+            const string baseName = "节点";
+            if (_config.GetNode(baseName) == null) return baseName;
+            for (int i = 1; ; i++)
+            {
+                string candidate = $"{baseName}_{i}";
+                if (_config.GetNode(candidate) == null) return candidate;
+            }
+        }
+
+        /// <summary>
+        /// 在画布空白处弹出右键菜单：重置视口 / 显示全部节点 / 定位起始节点，
+        /// 在光标处新建节点 / 自动布局，吸附网格开关。localMouse 为画布局部坐标。
+        /// </summary>
+        private void ShowCanvasContextMenu(Vector2 localMouse)
+        {
+            _ctxCanvasPos = _canvas.ScreenToCanvas(localMouse);
+
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent("重置视口"),     false, () => { ResetViewport(); Repaint(); });
+            menu.AddItem(new GUIContent("显示全部节点"), false, () => { FrameAllNodes();  Repaint(); });
+
+            var start = GetStartNode();
+            if (start != null)
+                menu.AddItem(new GUIContent("定位到起始节点"), false, () => { CenterOn(start.position); Repaint(); });
+            else
+                menu.AddDisabledItem(new GUIContent("定位到起始节点"));
+
+            menu.AddSeparator("");
+            if (_config)
+                menu.AddItem(new GUIContent("在此处新建节点"), false, () => { AddNodeAt(_ctxCanvasPos); Repaint(); });
+            else
+                menu.AddDisabledItem(new GUIContent("在此处新建节点"));
+            menu.AddItem(new GUIContent("自动布局"), false, () => { RunAutoLayout(); Repaint(); });
+
+            menu.AddSeparator("");
+            menu.AddItem(new GUIContent(_snapToGrid ? "吸附网格：开" : "吸附网格：关"),
+                _snapToGrid, () => { _snapToGrid = !_snapToGrid; Repaint(); });
+
+            menu.ShowAsContext();
+        }
+
+        #endregion
+
         #region 视口方向
         /// <summary>
         /// 切换布局方向时，以第一个根节点（开始节点）为轴心，
@@ -1267,6 +1386,14 @@ namespace Ale.NodeTree.Editor
                     if (evt.button == 2)
                     {
                         // 中键：开始平移
+                        evt.Use();
+                    }
+                    else if (evt.button == 1)
+                    {
+                        // 右键空白处：弹出画布上下文菜单。
+                        // 节点右键在 DrawNodes、连线右键在 HandleConnectionInteraction 已先行消费事件，
+                        // 故事件能到达此处即代表点击落在空白区域。
+                        ShowCanvasContextMenu(localMouse);
                         evt.Use();
                     }
                     else if (evt.button == 0 && !_snapIsDragging)
