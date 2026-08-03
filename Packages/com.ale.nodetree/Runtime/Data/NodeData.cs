@@ -44,6 +44,10 @@ namespace Ale.NodeTree.Runtime
         [Tooltip("自定义属性值: 由所属 NodeTypeData.attributes 定义，可在编辑器逐节点配置；运行时经 GetAttributeValue<T>(id) 读取。")]
         public List<AttributeEntry> attributeValues = new List<AttributeEntry>();
 
+        [Header("状态标签规则")]
+        [Tooltip("逐标签的挂载条件: 每条规则对应 NodeTreeData.tags 中的一个标签，其 condition 即在本节点挂上该标签的门槛（空条件=无门槛）。由 RebuildTagRules 随标签词表自动同步。")]
+        public List<NodeTagRule> tagRules = new List<NodeTagRule>();
+
         [Header("子节点列表")]
         public List<string> childNodeIds = new List<string>();
 
@@ -61,6 +65,46 @@ namespace Ale.NodeTree.Runtime
             var type = config != null ? config.GetNodeType(nodeTypeRef) : null;
             AttributeSync.Sync(attributeValues, type != null ? type.attributes : null);
             InvalidateEntryCache();
+        }
+        #endregion
+
+        #region 状态标签规则
+        /// <summary>
+        /// 按标签词表（<see cref="NodeTreeData.tags"/>）协调 <see cref="tagRules"/>：
+        /// 为新增标签补一条空条件规则、移除已删标签的规则。幂等，可在编辑器中反复调用。
+        /// </summary>
+        /// <param name="config">节点所属的 NodeTreeData（用于取标签词表）。</param>
+        public void RebuildTagRules(NodeTreeData config)
+        {
+            var tags = config != null ? config.tags : null;
+            if (tags == null) { tagRules.Clear(); return; }
+
+            // 移除：tagRules 中标签已从词表删除的项
+            tagRules.RemoveAll(r => r == null || !TagExists(tags, r.tagName));
+            // 补充：词表中存在但 tagRules 尚无的标签
+            foreach (var t in tags)
+            {
+                if (t == null || string.IsNullOrEmpty(t.tagName)) continue;
+                if (GetTagRule(t.tagName) == null)
+                    tagRules.Add(new NodeTagRule(t.tagName));
+            }
+        }
+
+        /// <summary>取指定标签的挂载规则，未找到返回 null。</summary>
+        public NodeTagRule GetTagRule(string tagName)
+        {
+            if (string.IsNullOrEmpty(tagName)) return null;
+            foreach (var r in tagRules)
+                if (r != null && r.tagName == tagName) return r;
+            return null;
+        }
+
+        private static bool TagExists(List<NodeTagData> tags, string tagName)
+        {
+            if (string.IsNullOrEmpty(tagName)) return false;
+            foreach (var t in tags)
+                if (t != null && t.tagName == tagName) return true;
+            return false;
         }
         #endregion
 

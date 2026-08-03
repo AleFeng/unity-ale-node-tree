@@ -5,7 +5,7 @@ namespace Ale.NodeTree.Runtime
 {
     /// <summary>
     /// 节点树配置资产（ScriptableObject）。
-    /// 存储所有节点实例、节点类型定义、条件类型定义及全局布局设置。
+    /// 存储所有节点实例、节点类型定义、条件类型定义、状态标签词表及全局布局设置。
     /// 通过菜单 NodeTree System/Config Node Tree 创建。
     /// </summary>
     [CreateAssetMenu(fileName = "ConfigNodeTree", menuName = "NodeTree System/Config Node Tree")]
@@ -19,6 +19,9 @@ namespace Ale.NodeTree.Runtime
 
         [Header("条件类型定义")]
         public List<NodeConditionTypeData> conditionTypes = new List<NodeConditionTypeData>(); // 可用的条件类型元数据列表
+
+        [Header("状态标签定义")]
+        public List<NodeTagData> tags = new List<NodeTagData>(); // 节点运行时状态标签词表（内置 Unlock / Finished，可自定义）
 
         [Header("布局设置")]
         public ELayoutDirection layoutDirection = ELayoutDirection.Left2Right; // 编辑器画布的整体布局方向
@@ -114,6 +117,10 @@ namespace Ale.NodeTree.Runtime
             EnsureBuiltinConditionType("NodeUnlocked", "节点已解锁（对应 NodeTreeSaveDataManager.IsNodeUnlocked）");
             EnsureBuiltinConditionType("NodeFinished", "节点已完成（对应 NodeTreeSaveDataManager.IsNodeFinished）");
 
+            // 默认状态标签（Unlock 自动刷新 / Finished 手动设置）
+            EnsureBuiltinTag(NodeTreeTags.Unlock, "已解锁", true);
+            EnsureBuiltinTag(NodeTreeTags.Finished, "已完成", false);
+
             // 默认开始节点（仅在 nodes 为空时添加）
             EnsureStartNode();
         }
@@ -164,6 +171,21 @@ namespace Ale.NodeTree.Runtime
             {
                 conditionType = conditionType,
                 description   = description
+            });
+        }
+
+        /// <summary>
+        /// 若 tags 列表中不存在指定 tagName，则追加一条新标签定义。已存在时直接返回（保证幂等）。
+        /// </summary>
+        private void EnsureBuiltinTag(string tagName, string description, bool autoRefresh)
+        {
+            foreach (var t in tags)
+                if (t.tagName == tagName) return;
+            tags.Add(new NodeTagData
+            {
+                tagName     = tagName,
+                description = description,
+                autoRefresh = autoRefresh
             });
         }
 

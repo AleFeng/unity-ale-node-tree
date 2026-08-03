@@ -49,6 +49,10 @@ namespace Ale.NodeTree.Runtime
         // 与 _data 并行的 O(1) 查询镜像（HashSet 不可序列化，仅运行时加速；随 _data 同步维护）。
         private readonly Dictionary<string, HashSet<string>> _tagSets = new Dictionary<string, HashSet<string>>();
 
+        // 条件求值上下文（懒建）：把本管理器作为 INodeTreeStateSource 暴露给判定器。
+        private NodeTreeConditionContext _context;
+        private NodeTreeConditionContext Context => _context ??= new NodeTreeConditionContext(this);
+
         // ── 通用标签查询 / 修改 ──────────────────────────────────────────────────
 
         /// <summary>查询指定节点是否挂载某标签。</summary>
@@ -144,6 +148,75 @@ namespace Ale.NodeTree.Runtime
         {
             _data = new NodeTreeSaveData();
             _tagSets.Clear();
+        }
+
+        // ── 便捷门面：按条件置标签（内部自判条件、返回是否成功） ────────────────────
+
+        /// <summary>
+        /// 尝试为节点挂上某标签：取该节点对应标签的挂载条件并求值，通过（或无规则 / 空条件）则挂上并返回 true；
+        /// 不通过则不挂、返回 false。已挂载则直接返回 true。
+        /// </summary>
+        /// <param name="config">节点所属的 NodeTreeData（用于定位节点及其标签规则）。</param>
+        public bool TrySetTag(NodeTreeData config, string nodeId, string tag)
+        {
+            if (config == null || string.IsNullOrEmpty(nodeId) || string.IsNullOrEmpty(tag)) return false;
+            if (HasTag(nodeId, tag)) return true;
+
+            var node = config.GetNode(nodeId);
+            if (node == null) return false;
+            if (!EvaluateTagRule(node, tag)) return false;
+
+            AddTag(nodeId, tag);
+            return true;
+        }
+
+        /// <summary>尝试将节点置为已解锁（等价于 TrySetTag(config, nodeId, "Unlock")）。</summary>
+        public bool TrySetUnlock(NodeTreeData config, string nodeId) => TrySetTag(config, nodeId, NodeTreeTags.Unlock);
+
+        /// <summary>尝试将节点置为已完成（等价于 TrySetTag(config, nodeId, "Finished")）。</summary>
+        public bool TrySetFinished(NodeTreeData config, string nodeId) => TrySetTag(config, nodeId, NodeTreeTags.Finished);
+
+        /// <summary>
+        /// 刷新所有节点的「自动」标签（<see cref="NodeTagData.autoRefresh"/>=true）：按各自逐节点条件求值，
+        /// 达成即挂（单调不摘）。做定点迭代直至一轮无新增，以支撑链式解锁（A 完成→B 解锁→…）。
+        /// 手动标签（如 Finished）不受影响，仅由业务主动 TrySetFinished 设置。
+        /// </summary>
+        public void RefreshAllNodeStates(NodeTreeData config)
+        {
+            if (config == null || config.nodes == null || config.tags == null) return;
+
+            var autoTags = new List<string>();
+            foreach (var t in config.tags)
+                if (t != null && t.autoRefresh && !string.IsNullOrEmpty(t.tagName))
+                    autoTags.Add(t.tagName);
+            if (autoTags.Count == 0) return;
+
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var node in config.nodes)
+                {
+                    if (node == null || string.IsNullOrEmpty(node.nodeId)) continue;
+                    foreach (var tag in autoTags)
+                    {
+                        if (HasTag(node.nodeId, tag)) continue;
+                        if (EvaluateTagRule(node, tag))
+                        {
+                            AddTag(node.nodeId, tag);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 求值某节点某标签的挂载条件：无规则 / 空条件 = 无门槛（通过）。
+        private bool EvaluateTagRule(NodeData node, string tag)
+        {
+            var rule = node.GetTagRule(tag);
+            if (rule == null || rule.condition == null || rule.condition.IsEmpty) return true;
+            return rule.condition.Evaluate(Context).Passed;
         }
 
         // ── 兼容包装：旧「解锁 / 完成」bool API（映射到 Unlock / Finished 标签） ─────────
