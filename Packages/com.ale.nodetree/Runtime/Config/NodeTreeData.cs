@@ -141,7 +141,7 @@ namespace Ale.NodeTree.Runtime
         private void EnsureBuiltinNodeType(string typeName, ENodeShape shape, Vector2 resolution, Color color)
         {
             foreach (var nt in nodeTypes)
-                if (nt.typeName == typeName) return;
+                if (nt != null && nt.typeName == typeName) return;
             nodeTypes.Add(new NodeTypeData
             {
                 typeName   = typeName,
@@ -158,7 +158,7 @@ namespace Ale.NodeTree.Runtime
         private void EnsureBuiltinTag(string tagName, string description, bool autoRefresh)
         {
             foreach (var t in tags)
-                if (t.tagName == tagName) return;
+                if (t != null && t.tagName == tagName) return;
             tags.Add(new NodeTagData
             {
                 tagName     = tagName,
@@ -170,14 +170,19 @@ namespace Ale.NodeTree.Runtime
         /// <summary>返回所有根节点（不被任何其他节点的 childNodeIds 引用的节点）。</summary>
         public List<NodeData> GetRootNodes()
         {
+            var roots = new List<NodeData>();
+            if (nodes == null) return roots;
+
             var childSet = new HashSet<string>();
             foreach (var node in nodes)
+            {
+                if (node?.childNodeIds == null) continue;
                 foreach (var childId in node.childNodeIds)
                     childSet.Add(childId);
+            }
 
-            var roots = new List<NodeData>();
             foreach (var node in nodes)
-                if (!childSet.Contains(node.nodeId))
+                if (node != null && !childSet.Contains(node.nodeId))
                     roots.Add(node);
             return roots;
         }
@@ -185,8 +190,9 @@ namespace Ale.NodeTree.Runtime
         /// <summary>返回指定节点的父节点 ID，若为根节点则返回 null。</summary>
         public string GetParentId(string nodeId)
         {
+            if (nodes == null) return null;
             foreach (var node in nodes)
-                if (node.childNodeIds.Contains(nodeId))
+                if (node?.childNodeIds != null && node.childNodeIds.Contains(nodeId))
                     return node.nodeId;
             return null;
         }

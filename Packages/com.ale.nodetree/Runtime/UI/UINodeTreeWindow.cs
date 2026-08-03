@@ -412,8 +412,12 @@ namespace Ale.NodeTree.Runtime
             _pools.Clear();
             _activeNodes.Clear();
 
+            if (config.nodeTypes == null) return;
+
             foreach (var nodeType in config.nodeTypes)
             {
+                // 跳过坏条目（null 类型 / 空 typeName），避免 Dictionary 空键抛异常中断 InitTree
+                if (nodeType == null || string.IsNullOrEmpty(nodeType.typeName)) continue;
                 if (!nodeType.uiPrefab) continue;
                 if (_pools.ContainsKey(nodeType.typeName)) continue;
 
@@ -434,6 +438,9 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         private void SpawnNode(NodeData nodeData)
         {
+            // 空节点 / 空 nodeId / 空 nodeTypeRef 直接跳过（后者会令 Dictionary 空键抛异常）
+            if (nodeData == null || string.IsNullOrEmpty(nodeData.nodeId)
+                || string.IsNullOrEmpty(nodeData.nodeTypeRef)) return;
             if (!_pools.TryGetValue(nodeData.nodeTypeRef, out var pool)) return;
 
             var parent = _nodeContainer ? (Transform)_nodeContainer : nodeTreeRoot;
@@ -513,8 +520,12 @@ namespace Ale.NodeTree.Runtime
             }
             _lineCanvasRenderers.Clear();
 
+            if (config.nodeTypes == null) return;
+
             foreach (var nodeType in config.nodeTypes)
             {
+                // 跳过坏条目（null 类型 / 空 typeName）——`?.` 只护 line，不护 nodeType 本身
+                if (nodeType == null || string.IsNullOrEmpty(nodeType.typeName)) continue;
                 if (!nodeType.line?.material) continue;
                 if (_lineCanvasRenderers.ContainsKey(nodeType.typeName)) continue;
 
@@ -619,6 +630,9 @@ namespace Ale.NodeTree.Runtime
         private readonly Dictionary<string, UINodeBase> _activeNodes
             = new Dictionary<string, UINodeBase>();
 
+        // 每次可见性刷新的去重集合（避免重复 nodeId 造成 Spawn/Despawn 抖动）；复用以免每帧分配
+        private readonly HashSet<string> _visibilitySeen = new HashSet<string>();
+
         /// <summary>
         /// 刷新所有节点的可见性。
         /// </summary>
@@ -635,10 +649,16 @@ namespace Ale.NodeTree.Runtime
             // 因此节点屏幕坐标 = _nodeContainer.position.xy + node.position + _nodePositionOffset。
             float containerX = _nodeContainer.position.x;
             float containerY = _nodeContainer.position.y;
+            if (config.nodes == null) return;
+
             // 检查所有节点是否在屏幕边界内，只为可见节点分配 UI 实例进行显示。
+            _visibilitySeen.Clear();
             foreach (var node in config.nodes)
             {
-                if (node == null) continue;
+                // 空节点 / 空 nodeId 跳过（后者会令 _activeNodes.ContainsKey 空键抛异常，破坏整轮裁剪）
+                if (node == null || string.IsNullOrEmpty(node.nodeId)) continue;
+                // 重复 nodeId：仅处理首个，避免同一 id 的屏外副本把屏内实例反复 Spawn/Despawn 抖动
+                if (!_visibilitySeen.Add(node.nodeId)) continue;
 
                 // _nodeContainer.position是屏幕空间坐标，再加上 节点的局部坐标(包括局部偏移) 就能直接得到 节点的 屏幕空间坐标
                 float nodePosX = containerX + node.position.x + _nodePositionOffset.x;
