@@ -28,6 +28,11 @@ namespace Ale.NodeTree.Runtime
                  "在所有节点的外围增加留白，避免节点被 ScrollView 边缘裁剪。")]
         [SerializeField] private Vector4 nodeTreePadding = new Vector4(100f, 100f, 100f, 100f);
 
+        [Tooltip("打开（InitTree）时自动刷新所有节点的自动状态标签（如 Unlock）：\n" +
+                 "按各节点条件重算并挂上（达成即挂、单调不摘、支持链式解锁）。\n" +
+                 "这是最简单直接的刷新方式；也可关闭后由业务在合适时机手动调用 RefreshAllNodeStates()。")]
+        [SerializeField] private bool refreshStatesOnInit = true;
+
         /// <summary>
         /// 将编辑器画布坐标系下的节点位置整体偏移到 nodeTreeRoot 局部坐标系。
         /// 由 CalcAndSetRootSize() 计算，使最顶/最左节点的边缘紧贴内边距。
@@ -112,6 +117,19 @@ namespace Ale.NodeTree.Runtime
             InitLineMeshRenderers();
             _lineMeshDirty   = true;
             _visibilityDirty = true; // 强制下一帧刷新一次可见性
+
+            // 打开时刷新所有节点的自动状态标签（最简单直接的刷新方式）
+            if (refreshStatesOnInit)
+                NodeTreeSaveDataManager.Instance.RefreshAllNodeStates(config);
+        }
+
+        /// <summary>
+        /// 刷新所有节点的自动状态标签（转调 <see cref="NodeTreeSaveDataManager.RefreshAllNodeStates"/>）。
+        /// 供业务在合适时机（如打开面板、加载存档后）手动触发；InitTree 亦会按 refreshStatesOnInit 自动调用。
+        /// </summary>
+        public void RefreshAllNodeStates()
+        {
+            if (config) NodeTreeSaveDataManager.Instance.RefreshAllNodeStates(config);
         }
 
         /// <summary>
