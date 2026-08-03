@@ -4,7 +4,10 @@
     "references": [
         "Ale.NodeTree.Runtime",
         "Ale.Toolkit.Runtime",
-        "Ale.Toolkit.Editor"
+        "Ale.Toolkit.Editor",
+        "Ale.Condition.Core",
+        "Ale.Condition.Runtime",
+        "Ale.Condition.Editor"
     ],
     "includePlatforms": [
         "Editor"

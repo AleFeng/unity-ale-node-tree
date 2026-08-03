@@ -3,6 +3,8 @@
     "rootNamespace": "",
     "references": [
         "Ale.Toolkit.Runtime",
+        "Ale.Condition.Core",
+        "Ale.Condition.Runtime",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
