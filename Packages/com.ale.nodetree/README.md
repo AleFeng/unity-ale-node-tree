@@ -7,12 +7,12 @@
   <a href="./README_JA.md">日本語</a>
 </p>
 
-面向 Unity 的**可视化节点树 / 技能树 / 科技树**插件。用一个 `NodeTreeData` 资产集中配置**节点、节点类型、解锁条件与画布布局**；配套一个**可视化编辑器**（画布拖拽 / 缩放 / 平移 / 连线）与一套**开箱即用的运行时 UI**（按类型对象池化、视口裁剪、URP 流光连线）。节点的**已解锁 / 已完成**状态由存档管理器维护，解锁条件通过**可扩展的条件检查器**判定。
+面向 Unity 的**可视化节点树 / 技能树 / 科技树**插件。用一个 `NodeTreeData` 资产集中配置**节点、节点类型、状态标签与画布布局**；配套一个**可视化编辑器**（画布拖拽 / 缩放 / 平移 / 连线）与一套**开箱即用的运行时 UI**（按类型对象池化、视口裁剪、URP 流光连线）。节点状态以**标签（Tag）**承载（内置 **Unlock / Finished**），由存档管理器维护；每个标签的挂载门槛用 `com.ale.toolkit` 条件系统（`Ale.Condition`）的 `ConditionExpression` 描述。
 
 - 数据驱动：一个 `NodeTreeData`（ScriptableObject）承载整棵树，编辑器全程 Undo / Redo。
 - 高性能运行时：按节点类型对象池化、视口裁剪按需 Spawn / Despawn、连线 Mesh 合批降 DrawCall。
-- 可扩展条件：实现 `INodeConditionChecker` 即可自定义解锁条件，内置「已解锁 / 已完成」两种检查器。
-- 存档友好：`NodeTreeSaveDataManager` 维护解锁 / 完成状态并支持 JSON 序列化，可接入任意游戏存档系统。
+- 条件即插件：直接复用 `com.ale.toolkit` 的 `Ale.Condition` 条件系统，实现 `IConditionEvaluator` 并打 `[ConditionEvaluator("Key")]` 特性即可扩展；内置 `NodeFinished` / `NodeUnlocked` / `NodeHasTag` 三个判定器。
+- 存档友好：`NodeTreeSaveDataManager` 以标签制维护节点状态并支持 JSON 序列化，可接入任意游戏存档系统。
 - 底层集成：节点名 / 描述本地化经底层包 `com.ale.toolkit` 的 `AttributeValue`(Text) 承载（项目启用 toolkit 的 `ATK_LOCALIZATION` 时取多语文本，否则纯文本回退，本插件无需本地化宏）；悬停弹窗淡入淡出基于 `com.ale.toolkit` 中央 Tween；对象池基于 `com.ale.toolkit`。
 
 ---
@@ -22,9 +22,9 @@
 | 模块 | 职责 | 主要类型 |
 |------|------|---------|
 | **配置** | 节点树配置资产 | `NodeTreeData` |
-| **数据** | 节点 / 类型 / 条件 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData` |
-| **条件** | 解锁条件判定与扩展 | `INodeConditionChecker`、`NodeConditionManager` |
-| **存档** | 已解锁 / 已完成状态 | `NodeTreeSaveDataManager` |
+| **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
+| **条件** | 接入 Toolkit `Ale.Condition` 与内置判定器 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、`NodeFinishedEvaluator`、`NodeUnlockedEvaluator`、`NodeHasTagEvaluator` |
+| **存档** | 节点状态标签 | `NodeTreeSaveDataManager` |
 | **运行时 UI** | 节点树展示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **Shader** | 流光连线 | `NodeTree/NodeLineFlow` |
@@ -35,13 +35,13 @@
 
 ## 配置资产 `NodeTreeData`
 
-整棵节点树的唯一数据源（`ScriptableObject`）。通过 `Assets > Create > NodeTree System/Config Node Tree` 创建，新建时自动填充：内置节点类型（**普通** / **结局**）、内置条件类型（**NodeUnlocked** / **NodeFinished**）以及一个位于画布原点的**起始节点**。
+整棵节点树的唯一数据源（`ScriptableObject`）。通过 `Assets > Create > NodeTree System/Config Node Tree` 创建，新建时自动填充：内置节点类型（**普通** / **结局**）、内置状态标签（**Unlock** / **Finished**）以及一个位于画布原点的**起始节点**。
 
 | 字段 | 说明 |
 |------|------|
 | `nodes` | `List<NodeData>`，所有节点实例 |
 | `nodeTypes` | `List<NodeTypeData>`，节点类型定义（外观 + UI 预制体 + 连线样式） |
-| `conditionTypes` | `List<NodeConditionTypeData>`，可用的条件类型元数据 |
+| `tags` | `List<NodeTagData>`，标签词表（内置 `Unlock` / `Finished`，可自定义） |
 | `layoutDirection` | `ELayoutDirection`，画布整体布局方向 |
 | `zoom` | 编辑器画布缩放（由编辑器写入，运行时不使用） |
 
@@ -60,8 +60,7 @@
 | `nodeId` | 节点唯一 ID（同一 `NodeTreeData` 内唯一） |
 | `nodeTypeRef` | 引用某个 `NodeTypeData.typeName`，决定外观与 UI 预制体 |
 | `comment` | 编辑器备注（不影响运行时） |
-| `conditionSatisfyType` | `EConditionSatisfyType`（`All` = AND / `Any` = OR），决定各条件组的组合逻辑 |
-| `conditionGroups` | `List<ConditionGroupData>`，解锁条件（多组、组内多条） |
+| `tagRules` | `List<NodeTagRule>`，每个标签一条挂载规则（`tagName` + `ConditionExpression`），随 `NodeTreeData.tags` 词表自动同步 |
 | `uiIcon` | 节点图标（`Sprite`） |
 | `nodeName` / `nodeDesc` | 节点名称 / 描述（`com.ale.toolkit` 的 `AttributeValue`(Text)：纯文本 + 可选本地化引用；`ResolveText()` 优先取本地化、回退纯文本） |
 | `position` | 画布像素坐标 |
@@ -72,8 +71,8 @@
 
 - `T GetAttributeValue<T>(string id, T fallback = default)` / `bool SetAttributeValue<T>(string id, T value)` / `AttributeEntry GetEntry(string id)` —— O(1) 读写自定义属性值。
 - `void RebuildAttributes(NodeTreeData config)` —— 按所属节点类型的 `attributes` schema 协调 `attributeValues`（补默认 / 删多余 / 类型漂移重置）。
-- `bool IsUnlock(object context = null)` —— 按 `conditionSatisfyType` + 各 `ConditionGroupData` 求值是否已解锁；`conditionGroups` 为空视为无条件解锁（`true`）。求值经 `NodeConditionManager` 路由到各条件检查器。
-- `bool IsFinish()` —— 经 `NodeTreeSaveDataManager` 查询是否已完成。
+- `void RebuildTagRules(NodeTreeData config)` —— 按 `NodeTreeData.tags` 词表协调 `tagRules`（补缺 / 删多余），保证每个标签恰有一条规则。
+- `NodeTagRule GetTagRule(string tagName)` —— 取某标签的挂载规则（含其 `ConditionExpression`），未找到返回 `null`。
 
 ### 节点类型 `NodeTypeData` 与连线样式 `LineTypeData`
 
@@ -82,72 +81,72 @@
 - **`ENodeShape`**（编辑器画布形状）：`Circle`、`Square`、`Triangle`、`Diamond`、`HorizontalCapsule`、`Parallelogram`、`Pentagon`、`Hexagon`、`Octagon`、`Star`。
 - **`LineTypeData`**：`lineType`（`ELineType`：`Straight` 直线 / `Curve` 曲线 / `Polyline` 折线）、`lineWidth`（像素）、`material`（连线材质，配合 `NodeTree/NodeLineFlow` 可做流光效果）。
 
-### 条件数据 `ConditionData` / `ConditionGroupData`
+### 状态标签 `NodeTagData` / 标签规则 `NodeTagRule`
 
-- `ConditionData`：单条条件 —— `conditionType`（引用 `NodeConditionTypeData.conditionType`）、`comparison`（`EConditionComparison`：`Equal` / `NotEqual` / `Greater` / `Less`）、`conditionParam`（传给检查器的参数字符串）。
-- `ConditionGroupData`：条件组 —— `satisfyType`（`EConditionSatisfyType` All/Any）+ `conditions`（`List<ConditionData>`）。空组视为无限制（恒通过）。
-- `NodeConditionTypeData`：条件类型元数据（`conditionType` + `description`），在 `NodeTreeData` 中预注册，仅供编辑器展示与选择。
+- `NodeTagData`：标签词表条目（存于 `NodeTreeData.tags`）—— `tagName`（标签名）、`description`（说明）、`color`（编辑器展示色）、`autoRefresh`（是否参与自动刷新，见「存档」`RefreshAllNodeStates`）。内置 **Unlock**（`autoRefresh = true`，按前置完成情况自动挂上）与 **Finished**（`autoRefresh = false`，一般由业务主动置），可自定义新增。
+- `NodeTagRule`：单个标签在某节点上的挂载规则（存于 `NodeData.tagRules`）—— `tagName`（对应词表标签）、`condition`（`ConditionExpression`，即在本节点挂上该标签的门槛；**空表达式 = 无门槛、恒通过**）。由 `NodeData.RebuildTagRules(config)` 随 `tags` 词表自动同步，`NodeData.GetTagRule(tagName)` 取用。
+- `ConditionExpression`（`Ale.Condition`）：两级 AND / OR 结构（表达式 → 组 → 项 → 参数），承载一个标签的挂载条件；求值时把项路由到对应的 `IConditionEvaluator`。
 - 节点自定义属性：模板端 `NodeTypeData.attributes`（`List<AttributeDefinition>`，`com.ale.toolkit`）定义字段 schema，实例端 `NodeData.attributeValues`（`List<AttributeEntry>`）承载值，二者经 `NodeData.RebuildAttributes` 同步。
 
 ---
 
-## 条件系统
+## 条件系统：接入 Toolkit `Ale.Condition`
 
-判定「节点是否满足解锁条件」。检查逻辑与数据解耦：数据层只描述 `conditionType` + `comparison` + `conditionParam`，实际判断由注册到 `NodeConditionManager` 的检查器完成。
+node-tree 不再自研条件系统，而是**直接复用 `com.ale.toolkit`（1.4.0+）的条件系统 `Ale.Condition`**：运行时依赖 `Ale.Condition.Core` / `Ale.Condition.Runtime`，编辑器依赖 `Ale.Condition.Editor`。每个标签的挂载门槛用 `ConditionExpression` 承载（两级 AND / OR：表达式 → 组 → 项 → 参数），项按其键路由到对应判定器求值。
 
-- **`INodeConditionChecker`**：`string ConditionType { get; }` + `bool Check(string conditionParam, EConditionComparison comparison, object context)`。
-- **`NodeConditionManager`**（静态单例）：`Register(INodeConditionChecker)` / `Unregister(string conditionType)` / `Check(conditionType, conditionParam, comparison, context)`（`conditionType` 为空或未注册时返回 `true`，不阻断）。首次访问自动注册内置检查器。
-- **内置检查器**：`NodeUnlockedChecker`（`conditionType = "NodeUnlocked"`，读 `NodeTreeSaveDataManager.IsNodeUnlocked`）、`NodeFinishedChecker`（`"NodeFinished"`，读 `IsNodeFinished`）；`conditionParam` 为目标节点 `nodeId`。
+**扩展方式**：实现 `Ale.Condition.IConditionEvaluator` 并打 `[ConditionEvaluator("Key")]` 特性（自动发现并注册），判定器经 `ctx.GetService<T>()` 读取数据源。
 
-**自定义条件**（例：等级达标才解锁）：
+**node-tree 内置判定器**（命名空间 `Ale.NodeTree.Runtime`，均实现 `IConditionEvaluator`、运行时自动注册、编辑器下拉可选）：
+
+| 判定器 | 键 | 参数 | 判定 |
+|--------|----|----|------|
+| `NodeFinishedEvaluator` | `NodeTree.NodeFinished` | `target`（目标节点 ID） | 目标节点是否挂 `Finished` 标签 |
+| `NodeUnlockedEvaluator` | `NodeTree.NodeUnlocked` | `target` | 目标节点是否挂 `Unlock` 标签 |
+| `NodeHasTagEvaluator` | `NodeTree.NodeHasTag` | `target` + `tag` | 目标节点是否挂指定标签 |
+
+- **数据源接口** `INodeTreeStateSource { bool HasTag(string nodeId, string tag); }` —— 判定器读取节点标签的抽象来源，由 `NodeTreeSaveDataManager` 实现。
+- **条件上下文** `NodeTreeConditionContext : IConditionContext` —— 承载求值所需服务，判定器经 `ctx.GetService<INodeTreeStateSource>()` 取数据源。
+- **标签名常量** `NodeTreeTags.Unlock` / `NodeTreeTags.Finished`。
+
+**自定义判定器**（实现 `IConditionEvaluator` + 打特性即自动注册；经 `ctx.GetService<T>()` 读状态）：
 
 ```csharp
-public class LevelChecker : INodeConditionChecker
+[ConditionEvaluator("NodeTree.MyCondition")]
+public sealed class MyEvaluator : IConditionEvaluator
 {
-    public string ConditionType => "PlayerLevel";
-
-    // conditionParam = 需求等级；context 由调用方传入（此处为玩家等级）
-    public bool Check(string conditionParam, EConditionComparison comparison, object context)
-    {
-        int need = int.Parse(conditionParam);
-        int level = (int)context;
-        return comparison switch
-        {
-            EConditionComparison.Greater  => level >  need,
-            EConditionComparison.Less     => level <  need,
-            EConditionComparison.NotEqual => level != need,
-            _                             => level >= need,
-        };
-    }
+    public string Key => "NodeTree.MyCondition";
+    public string DisplayName => "我的条件";
+    public string Category => "NodeTree";
+    public IReadOnlyList<ConditionParamDef> ParamSchema => _schema; // 声明参数 schema
+    // 经 ctx.GetService<INodeTreeStateSource>() 或自定义数据源读状态
+    public bool Evaluate(IReadOnlyList<ConditionParam> parameters, IConditionContext ctx) { /* ... */ return true; }
 }
-
-// 注册（游戏启动时一次）
-NodeConditionManager.Instance.Register(new LevelChecker());
-
-// 求值（context 会透传到每个检查器）
-bool unlocked = node.IsUnlock(context: player.Level);
 ```
 
 ---
 
 ## 存档 `NodeTreeSaveDataManager`
 
-静态单例，维护节点的**已解锁 / 已完成**状态。**不继承 MonoBehaviour、不自动保存**——由外部游戏存档系统读写，插件只负责运行时状态与序列化。
+静态单例，以**标签制**维护节点状态，并实现 `INodeTreeStateSource` 供条件判定器读取。**不继承 MonoBehaviour、不自动落盘**——由外部游戏存档系统读写，插件只负责运行时状态与序列化。
 
-- **查询**：`bool IsNodeUnlocked(string nodeId)`、`bool IsNodeFinished(string nodeId)`。
-- **修改**：`void SetNodeUnlocked(string nodeId, bool)`、`void SetNodeFinished(string nodeId, bool)`。
-- **存档集成**：`NodeTreeSaveData GetSaveData()`（返回深拷贝）、`void SetSaveData(NodeTreeSaveData)`（覆盖式，`null` 忽略）。数据结构 `NodeTreeSaveData { List<string> unlockedNodeIds; List<string> finishedNodeIds; }`。
-- **JSON**：`string SerializeToJson()`、`void DeserializeFromJson(string)`（基于 `JsonUtility`，零外部依赖）。
-- **重置**：`void Reset()`（清空所有记录，用于「开新游戏」）。
+- **通用标签**：`bool HasTag(string nodeId, string tag)`、`void AddTag(string nodeId, string tag)`、`void RemoveTag(string nodeId, string tag)`、`IReadOnlyCollection<string> GetTags(string nodeId)`、`void ClearNode(string nodeId)`。
+- **整份存取 / 序列化**：`NodeTreeSaveData Get()`（返回当前存档）、`void Set(NodeTreeSaveData)`（覆盖式）、`string Save()`（序列化为 JSON）、`void Load(string json)`（从 JSON 载入）、`void Reset()`（清空所有记录，用于「开新游戏」）。实际落盘交宿主。数据结构 `NodeTreeSaveData { List<NodeTagState> nodes }`，`NodeTagState { string nodeId; List<string> tags; }`。
+- **便捷门面**（内部自判该标签的 `ConditionExpression`，返回是否设置成功）：`bool TrySetTag(NodeTreeData config, string nodeId, string tag)`、`bool TrySetUnlock(config, nodeId)`、`bool TrySetFinished(config, nodeId)`。
+- **批量刷新**：`void RefreshAllNodeStates(NodeTreeData config)` —— 对 `autoRefresh` 标签（如 `Unlock`）按条件重算并挂上：**达成即挂、单调不摘、定点迭代**（支持链式解锁）。
 
 ```csharp
-var mgr = NodeTreeSaveDataManager.Instance;
-mgr.SetNodeUnlocked("node_02", true);
-mgr.SetNodeFinished("node_01", true);
+var save = NodeTreeSaveDataManager.Instance;
 
-string json = mgr.SerializeToJson();   // 交给你的存档系统持久化
-// ……读档时：
-mgr.DeserializeFromJson(json);
+// 业务时机主动置状态：内部自判该标签的条件，返回是否设置成功
+save.TrySetFinished(config, "chapter_01");   // 读完本章→置完成（Finished 条件通常为空=直接通过）
+
+// 打开面板 / 加载存档后刷新所有自动标签（Unlock 按前置完成情况链式解锁）
+save.RefreshAllNodeStates(config);
+bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
+
+// 存档往返（落盘交宿主）
+string json = save.Save();
+save.Load(json);
 ```
 
 ---
@@ -161,9 +160,10 @@ mgr.DeserializeFromJson(json);
 - 根据所有节点的位置 / 尺寸**自动计算并设置根容器 Size**；
 - **按节点类型维护对象池**（基于 `com.ale.toolkit` 的 `ToolkitGameObjectPool`），通过**视口裁剪按需 Spawn / Despawn** 节点 UI；
 - **为每种节点类型合并生成连线 Mesh**（减少 DrawCall），UV 配合 `NodeTree/NodeLineFlow` 做流光；
-- 在 `LateUpdate` 中按脏标记按需重建连线。
+- 在 `LateUpdate` 中按脏标记按需重建连线；
+- `refreshStatesOnInit`：勾选后在 `InitTree` 时自动调用 `RefreshAllNodeStates`（按存档与条件刷新所有自动标签）。
 
-**主要 API**：`InitTree(NodeTreeData configOverride = null)`（初始化 / 重建整棵树）、`SelectNode(string nodeId)`、`RefreshVisibility()`（重算视口裁剪）、`MarkLineDirty()`（标记连线待重建）。
+**主要 API**：`InitTree(NodeTreeData configOverride = null)`（初始化 / 重建整棵树）、`RefreshAllNodeStates()`（对当前 `config` 调 `NodeTreeSaveDataManager.RefreshAllNodeStates`）、`SelectNode(string nodeId)`、`RefreshVisibility()`（重算视口裁剪）、`MarkLineDirty()`（标记连线待重建）。
 
 ### `UINodeBase`
 
@@ -187,7 +187,9 @@ mgr.DeserializeFromJson(json);
 
 `Tools > NodeTree > Node Tree Editor`（或在 `NodeTreeData` 资产的 Inspector 点「在 Node Tree Editor 中编辑」）打开。
 
-- **`NodeTreeEditorWindow`**（`EditorWindow`，IMGUI + GL）：三列布局 —— 左侧**节点类型 / 条件类型管理**、中央**画布**（节点拖拽 / 缩放 / 平移 / 连线）、右侧**节点属性面板**；支持节点增删、子树切除、自动布局，所有修改经 `Undo.RecordObject` + `EditorUtility.SetDirty`，**全程 Undo / Redo 并触发资产保存**。画布平移 / 缩放 / 上次打开的配置经 `EditorPrefs` 持久化。
+- **`NodeTreeEditorWindow`**（`EditorWindow`，IMGUI + GL）：三列布局 —— 左侧**节点类型 / 标签管理**（原「条件类型」页签已删）、中央**画布**（节点拖拽 / 缩放 / 平移 / 连线）、右侧**节点属性面板**；支持节点增删、子树切除、自动布局，所有修改经 `Undo.RecordObject` + `EditorUtility.SetDirty`，**全程 Undo / Redo 并触发资产保存**。画布平移 / 缩放 / 上次打开的配置经 `EditorPrefs` 持久化。
+  - **「标签」页签**：维护 `NodeTreeData.tags` 词表（增删标签、改名 / 说明 / 颜色 / `autoRefresh`）。顶部「标签设置」区含**「自动写入 Unlock 条件」**开关——项目级设置（存 `ProjectSettings/NodeTreeEditorSettings.asset`，随版本库共享）：开启时在画布「添加子节点 / 连线」会自动向子节点的 `Unlock` 规则写入 `NodeTree.NodeFinished(target = 父节点 ID)` 条件。
+  - **右侧节点属性面板**：对每个标签用 Toolkit 的 `ConditionExpression` 内联绘制器（`ConditionExpressionDrawer`）编辑其在本节点的挂载条件，内置判定器可从下拉直接选择。
 - **`NodeDrawer`**（静态）：用 IMGUI + GL 绘制节点形状（圆 / 方 / 多边形等）与连线（直线 / 贝塞尔 / 折线），仅在 `Repaint` 期绘制。
 - **`NodeTreeCanvasState`**：画布交互状态（平移 / 缩放 / 选中 / 拖拽）与画布↔屏幕坐标互转。
 - **`NodeTreeDataEditor`**：`NodeTreeData` 的自定义 Inspector，顶部加「在 Node Tree Editor 中编辑」按钮。

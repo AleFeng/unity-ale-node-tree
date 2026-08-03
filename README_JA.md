@@ -25,7 +25,7 @@
 # Ale Node Tree - ノードツリーシステム
 
 Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラグイン**で、**スキルツリー / テックツリー / レベル進行ツリー / ストーリー進行ツリー**など、あらゆる「ノード + 接続 + 解放条件」構造の構築と表示に使えます。
-1 つの `NodeTreeData` アセットに**ノード・ノードタイプ・解放条件・キャンバスレイアウト**を集約し、**ビジュアルエディタ**（キャンバス上でのドラッグ / ズーム / パン / 接続、Undo / Redo 完全対応）と、すぐ使える**ランタイム UI**（タイプ別オブジェクトプール、ビューポートカリング、URP 流光ライン）を同梱します。各ノードの**解放済み / 完了済み**状態はセーブマネージャが管理し、解放条件は**差し替え可能な条件チェッカー**で判定します —— 判定ロジックは設定データと分離されているため、データモデルを変えずに任意のゲームルールを組み込めます。
+1 つの `NodeTreeData` アセットに**ノード・ノードタイプ・タグ語彙・キャンバスレイアウト**を集約し、**ビジュアルエディタ**（キャンバス上でのドラッグ / ズーム / パン / 接続、Undo / Redo 完全対応）と、すぐ使える**ランタイム UI**（タイプ別オブジェクトプール、ビューポートカリング、URP 流光ライン）を同梱します。各ノードの状態は**タグ（`Unlock` / `Finished` など）**で表現し、各タグを付与する条件は基盤 `com.ale.toolkit` の**条件システム（`Ale.Condition`）**の `ConditionExpression` で記述します —— 判定ロジックは設定データと分離されているため、データモデルを変えずに任意のゲームルールを組み込めます。
 
 ## 📜 目次
 - [Ale Node Tree - ノードツリーシステム](#ale-node-tree---ノードツリーシステム)
@@ -47,29 +47,29 @@ Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラ�
 多くのゲームは「ノード + 接続 + 解放条件」のツリー構造 —— スキルツリー、テックツリー、レベル進行、ストーリー進行…… を必要としますが、エディタ描画・接続レンダリング・ビューポート性能・解放判定を毎回ゼロから作るのは高コストです。Ale Node Tree はそれらを**1 つのデータアセット**と**1 つのツールチェーン**にまとめます：
 
 1. **ビジュアル編集** —— 1 つの `NodeTreeData` がツリー全体を保持。エディタは 3 カラムレイアウト（左：タイプ管理／中央：キャンバス（ドラッグ / ズーム / パン / 接続）／右：プロパティパネル）で、IMGUI + GL によりノード形状と接続線をリアルタイム描画。Undo / Redo に完全対応。
-2. **データ駆動の解放** —— 各ノードは複数の条件グループ（グループ間 AND / OR、グループ内 AND / OR）を保持でき、判定は `NodeConditionManager` に登録したチェッカーに委譲。組み込みで「解放済み / 完了済み」チェッカーを備え、カスタムルールはインターフェイス 1 つで追加可能。
+2. **タグと条件で駆動** —— 各ノードは**タグごとの規則（`NodeTagRule`）**を持ち、そのタグを付与する条件を基盤 `com.ale.toolkit` の `ConditionExpression`（2 段 AND / OR：式 → グループ → 項 → パラメータ）で記述。判定器は `IConditionEvaluator` を実装し `[ConditionEvaluator("Key")]` を付けるだけで自動登録。組み込みで `NodeTree.NodeFinished` / `NodeTree.NodeUnlocked` / `NodeTree.NodeHasTag` 判定器を備え、カスタムルールも同じ流儀で追加可能。
 3. **高性能ランタイム** —— ランタイム UI はノードタイプ別にプール化し、ビューポートカリングでオンデマンドに Spawn / Despawn。接続線 Mesh はタイプごとにバッチ化してドローコールを削減。URP 流光ラインシェーダーを同梱。
-4. **セーブ連携が容易** —— `NodeTreeSaveDataManager` が解放 / 完了状態を管理し JSON シリアライズに対応。`GetSaveData` / `SetSaveData` で任意のゲームセーブシステムに接続。
+4. **セーブ連携が容易** —— `NodeTreeSaveDataManager` がノードのタグ状態を管理し JSON シリアライズに対応。`Get()` / `Set()` / `Save()` / `Load()` で任意のゲームセーブシステムに接続（実際の永続化はホストに委譲）。
 5. **基盤パッケージに統合、ハード依存なし** —— ノード名 / 説明のローカライズは基盤 `com.ale.toolkit` の `AttributeValue`(Text) が担う（プロジェクトが toolkit の `ATK_LOCALIZATION` を有効化すると多言語テキスト、無効時はプレーンテキストにフォールバック。プラグイン自体にローカライズマクロは不要）。ホバーポップアップのフェードは内蔵（`com.ale.toolkit` の中央 Tween ベース）。オブジェクトプールは `com.ale.toolkit` を再利用。
 
 ### 特徴
 | 特徴 | 説明 |
 | --- | --- |
-| 単一アセット集約 | 1 つの `NodeTreeData` が全ノード・ノードタイプ・条件タイプ・キャンバスレイアウトを保持。エディタは ScriptableObject のみで動作、Undo / Redo 完全対応。 |
+| 単一アセット集約 | 1 つの `NodeTreeData` が全ノード・ノードタイプ・タグ語彙・キャンバスレイアウトを保持。エディタは ScriptableObject のみで動作、Undo / Redo 完全対応。 |
 | ビジュアルエディタ | 3 カラムレイアウト + キャンバスのドラッグ / ズーム / パン / 接続；ノード追加・削除、サブツリー切り離し、自動レイアウト；IMGUI + GL で 10 種のノード形状と直線 / 曲線 / 折れ線を描画。 |
-| 拡張可能な条件システム | データは `conditionType` + 比較方式 + パラメータのみを記述し、判定は `INodeConditionChecker` が実施。組み込み「解放済み / 完了済み」、カスタムルールはインターフェイス 1 つ。 |
+| 拡張可能な条件システム | 条件は基盤 `com.ale.toolkit` の `ConditionExpression`（2 段 AND / OR）で記述、判定は `IConditionEvaluator`（`[ConditionEvaluator]` で自動登録）が実施。組み込み判定器 `NodeTree.NodeFinished` / `NodeUnlocked` / `NodeHasTag`、カスタムルールは判定器 1 つ。 |
 | 高性能ランタイム UI | ノードタイプ別オブジェクトプール（`com.ale.toolkit` ベース）、ビューポートカリングでオンデマンド Spawn / Despawn、ライン Mesh バッチ化でドローコール削減。 |
 | URP 流光ライン | `NodeTree/NodeLineFlow` 透明流光シェーダー（フローテクスチャ / エッジフェード / グロー / HDR カラー）。ノードタイプごとにライン様式を設定。 |
-| セーブ連携 | `NodeTreeSaveDataManager` が解放 / 完了状態を管理、JSON シリアライズ、`GetSaveData` / `SetSaveData` で外部セーブに接続。 |
+| セーブ連携 | `NodeTreeSaveDataManager` がノードのタグ状態を管理、JSON シリアライズ、`Get()` / `Set()` / `Save()` / `Load()` で外部セーブに接続。 |
 | 基盤統合 | ノード名 / 説明のローカライズは `com.ale.toolkit` の `AttributeValue`(Text)（`ATK_LOCALIZATION` 有効時は多言語、無効時はプレーンテキスト）。ホバーポップアップのフェードは `com.ale.toolkit` の中央 Tween。オブジェクトプールは `com.ale.toolkit`。プラグイン自体にローカライズ / DOTween マクロは不要。 |
 
 ### モジュール一覧
 | モジュール | 役割 | 主な型 |
 | --- | --- | --- |
 | **設定** | ノードツリー設定アセット | `NodeTreeData` |
-| **データ** | ノード / タイプ / 条件 / カスタム属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData` |
-| **条件** | 解放判定と拡張 | `INodeConditionChecker`、`NodeConditionManager` |
-| **セーブ** | 解放済み / 完了済み状態 | `NodeTreeSaveDataManager` |
+| **データ** | ノード / タイプ / タグ | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
+| **条件と状態** | 条件判定と状態接続 | `ConditionExpression`(Toolkit)、`INodeTreeStateSource`、`NodeTreeSaveDataManager`、判定器 `NodeFinished` / `NodeUnlocked` / `NodeHasTag` |
+| **セーブ** | ノードのタグ状態 | `NodeTreeSaveDataManager` |
 | **ランタイム UI** | ノードツリー表示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
 | **エディタ** | ビジュアル編集 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
@@ -115,10 +115,10 @@ https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetr
 ```
 Project パネル右クリック > Create > NodeTree System/Config Node Tree
 ```
-新規の `NodeTreeData` には組み込みノードタイプ（普通 / エンディング）、組み込み条件タイプ（NodeUnlocked / NodeFinished）、開始ノードが自動で投入されます。
+新規の `NodeTreeData` には組み込みノードタイプ（普通 / エンディング）、組み込み状態タグ（`Unlock` / `Finished`）、開始ノードが自動で投入されます。
 
 **2. ビジュアル編集**
-`.asset` を選択し、Inspector 上部の「Node Tree Editor で編集」、またはメニュー `Tools > NodeTree > Node Tree Editor` を使用。左で**ノードタイプ**（形状 / 色 / サイズ / UI プレハブ / ライン様式）と**条件タイプ**を管理し、中央キャンバスでノードをドラッグ・接続して親子関係を構築、右のプロパティパネルでノードの ID・アイコン・解放条件グループ・カスタムデータを設定します。
+`.asset` を選択し、Inspector 上部の「Node Tree Editor で編集」、またはメニュー `Tools > NodeTree > Node Tree Editor` を使用。左で**ノードタイプ**（形状 / 色 / サイズ / UI プレハブ / ライン様式）と**タグ**を管理し、中央キャンバスでノードをドラッグ・接続して親子関係を構築、右のプロパティパネルでノードの ID・アイコン・各タグの付与条件（`ConditionExpression`）・カスタム属性を設定します。
 
 **3. ランタイムに組み込む**
 UI ルートに `UINodeTreeWindow` コンポーネントを追加し、`NodeTreeData` を `config` にドラッグ、コンテンツルートコンテナを指定して、ランタイムで `InitTree()` を呼ぶと、ノードデータからプール化されたノード UI とバッチ化された接続線が生成されます。
@@ -133,21 +133,22 @@ nodeTreeWindow.InitTree();
 someNodeUI.Clicked += ui => Debug.Log($"ノード {ui.nodeData.nodeId} をクリック");
 ```
 
-**4. 解放条件とセーブ**
+**4. タグ状態とセーブ**
 ```csharp
 using Ale.NodeTree.Runtime;
 
-// カスタム解放条件（ゲーム起動時に一度だけ登録）
-NodeConditionManager.Instance.Register(new MyLevelChecker());
-
-// ノードが解放済みか照会（context は各チェッカーへ透過的に渡される）
-bool unlocked = node.IsUnlock(context: player.Level);
-
-// 解放 / 完了状態 + セーブ
 var save = NodeTreeSaveDataManager.Instance;
-save.SetNodeUnlocked("node_02", true);
-string json = save.SerializeToJson();   // あなたのセーブシステムで永続化
-save.DeserializeFromJson(json);          // ロード時に上書き
+
+// ゲーム進行の任意のタイミングで状態を付与：内部でそのタグの条件を自己判定し、設定できたかを返す
+save.TrySetFinished(config, "chapter_01");   // 本章を読了 → 完了を付与（Finished 条件は通常空 = 無条件で通過）
+
+// パネルを開いた / セーブをロードした後に自動タグを再計算（Unlock は前提の完了状況に応じて連鎖的に解放）
+save.RefreshAllNodeStates(config);
+bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
+
+// セーブの往復（実際の永続化はホストに委譲）
+string json = save.Save();
+save.Load(json);
 ```
 
 **5. Demo を試す**
@@ -164,8 +165,8 @@ Packages/com.ale.nodetree/           ← パッケージルート
 ├── package.json  CHANGELOG.md  LICENSE.md  README.md   ← パッケージ内ドキュメント（3 言語）
 ├── Runtime/
 │   ├── Config/      ノードツリー設定アセット NodeTreeData
-│   ├── Data/        データモデル（NodeData / NodeTypeData / LineTypeData / Condition*）
-│   ├── Conditions/  条件システム（INodeConditionChecker / NodeConditionManager / 組み込みチェッカー）
+│   ├── Data/        データモデル（NodeData / NodeTypeData / LineTypeData / NodeTagData / NodeTagRule）
+│   ├── Conditions/  条件接続（INodeTreeStateSource / NodeTreeConditionContext / NodeTreeTags / 判定器：NodeFinished・NodeUnlocked・NodeHasTag）
 │   ├── Save/        セーブマネージャ NodeTreeSaveDataManager
 │   ├── UI/          ランタイム UI（UINodeTreeWindow / UINodeBase）
 │   └── Utility/     ライン Mesh 構築 NodeLineBuilder

@@ -7,12 +7,12 @@
   <a href="./README_JA.md">日本語</a>
 </p>
 
-A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeData` asset centralizes **nodes, node types, unlock conditions, and canvas layout**; it ships with a **visual editor** (drag / zoom / pan / connect on a canvas) and a set of **ready-to-use runtime UI** (per-type object pooling, viewport culling, URP flowing-line shader). Each node's **unlocked / finished** state is maintained by a save manager, and unlock conditions are evaluated through **pluggable condition checkers**.
+A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeData` asset centralizes **nodes, node types, state tags, and canvas layout**; it ships with a **visual editor** (drag / zoom / pan / connect on a canvas) and a set of **ready-to-use runtime UI** (per-type object pooling, viewport culling, URP flowing-line shader). Each node's state is carried by **tags** maintained in a save manager, and the condition that attaches a tag is evaluated through `com.ale.toolkit`'s **Condition System** (`Ale.Condition`).
 
 - Data-driven: a single `NodeTreeData` (ScriptableObject) holds the whole tree; the editor is fully Undo / Redo aware.
 - High-performance runtime: object pooling per node type, on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls.
-- Extensible conditions: implement `INodeConditionChecker` for custom unlock rules; two built-in checkers ("unlocked / finished").
-- Save-friendly: `NodeTreeSaveDataManager` tracks unlocked / finished state with JSON serialization, pluggable into any game save system.
+- Extensible conditions: powered by toolkit's `Ale.Condition`; write a custom `IConditionEvaluator` with a `[ConditionEvaluator("Key")]` attribute (auto-discovered) for any unlock rule. Ships with built-in evaluators (`NodeTree.NodeFinished` / `NodeTree.NodeUnlocked` / `NodeTree.NodeHasTag`).
+- Save-friendly: `NodeTreeSaveDataManager` tracks per-node tags with JSON serialization, pluggable into any game save system.
 - Base-package integration: node name / description localization is carried by `com.ale.toolkit`'s `AttributeValue`(Text) (multilingual when the project enables toolkit's `ATK_LOCALIZATION`, otherwise plain-text fallback; this plugin needs no localization macro); the hover popup fade in/out uses `com.ale.toolkit`'s central tween; object pooling is powered by `com.ale.toolkit`.
 
 ---
@@ -22,9 +22,9 @@ A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeD
 | Module | Responsibility | Key types |
 |--------|----------------|-----------|
 | **Config** | Node-tree config asset | `NodeTreeData` |
-| **Data** | Node / type / condition / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData`, `NodeConditionTypeData` |
-| **Conditions** | Unlock evaluation & extension | `INodeConditionChecker`, `NodeConditionManager` |
-| **Save** | Unlocked / finished state | `NodeTreeSaveDataManager` |
+| **Data** | Node / type / state tags / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `NodeTagData`, `NodeTagRule` |
+| **Conditions** | node-tree condition wiring (into toolkit `Ale.Condition`) | `INodeTreeStateSource`, `NodeTreeConditionContext`, `NodeTreeTags`; evaluators `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
+| **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
 | **Runtime UI** | Node-tree presentation | `UINodeTreeWindow`, `UINodeBase`, `NodeLineBuilder` |
 | **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 | **Shader** | Flowing line | `NodeTree/NodeLineFlow` |
@@ -35,13 +35,13 @@ Runtime assembly `Ale.NodeTree.Runtime`, editor assembly `Ale.NodeTree.Editor`, 
 
 ## Config asset `NodeTreeData`
 
-The single source of truth for the whole tree (`ScriptableObject`). Create it via `Assets > Create > NodeTree System/Config Node Tree`; a new asset is auto-seeded with built-in node types (**Normal** / **Ending**), built-in condition types (**NodeUnlocked** / **NodeFinished**), and a **start node** at the canvas origin.
+The single source of truth for the whole tree (`ScriptableObject`). Create it via `Assets > Create > NodeTree System/Config Node Tree`; a new asset is auto-seeded with built-in node types (**Normal** / **Ending**), built-in state tags (**Unlock** / **Finished**), and a **start node** at the canvas origin.
 
 | Field | Description |
 |-------|-------------|
 | `nodes` | `List<NodeData>`, all node instances |
 | `nodeTypes` | `List<NodeTypeData>`, type definitions (appearance + UI prefab + line style) |
-| `conditionTypes` | `List<NodeConditionTypeData>`, available condition-type metadata |
+| `tags` | `List<NodeTagData>`, the tag vocabulary (state tags a node can carry); seeded with `Unlock` (auto-refresh) and `Finished` |
 | `layoutDirection` | `ELayoutDirection`, overall canvas layout direction |
 | `zoom` | Editor canvas zoom (written by the editor; unused at runtime) |
 
@@ -60,8 +60,7 @@ A node instance stored in `NodeTreeData.nodes`.
 | `nodeId` | Unique node ID (unique within one `NodeTreeData`) |
 | `nodeTypeRef` | References a `NodeTypeData.typeName`; drives appearance & UI prefab |
 | `comment` | Editor-only note (no runtime effect) |
-| `conditionSatisfyType` | `EConditionSatisfyType` (`All` = AND / `Any` = OR) across condition groups |
-| `conditionGroups` | `List<ConditionGroupData>`, unlock conditions (multiple groups, each with multiple conditions) |
+| `tagRules` | `List<NodeTagRule>`, one rule per tag in the vocabulary; each holds the `ConditionExpression` that gates attaching that tag on this node (auto-synced with `NodeTreeData.tags`) |
 | `uiIcon` | Node icon (`Sprite`) |
 | `nodeName` / `nodeDesc` | Node name / description (`com.ale.toolkit`'s `AttributeValue`(Text): plain text + optional localization reference; `ResolveText()` prefers localized, falls back to plain) |
 | `position` | Canvas pixel coordinates |
@@ -72,8 +71,8 @@ A node instance stored in `NodeTreeData.nodes`.
 
 - `T GetAttributeValue<T>(string id, T fallback = default)` / `bool SetAttributeValue<T>(string id, T value)` / `AttributeEntry GetEntry(string id)` — O(1) read/write of custom attribute values.
 - `void RebuildAttributes(NodeTreeData config)` — reconciles `attributeValues` against the owning node type's `attributes` schema (add defaults / drop removed / reset on type drift).
-- `bool IsUnlock(object context = null)` — evaluates unlock state from `conditionSatisfyType` + `ConditionGroupData`s; an empty `conditionGroups` means unconditionally unlocked (`true`). Evaluation is routed through `NodeConditionManager` to the registered checkers.
-- `bool IsFinish()` — queries finished state via `NodeTreeSaveDataManager`.
+- `void RebuildTagRules(NodeTreeData config)` — reconciles `tagRules` against `NodeTreeData.tags` (add a rule per new tag / drop rules whose tag was removed), so every node keeps exactly one rule per tag in the vocabulary.
+- `NodeTagRule GetTagRule(string tagName)` — returns the rule (and thus the gating `ConditionExpression`) for a given tag, or `null` when absent.
 
 ### Node type `NodeTypeData` and line style `LineTypeData`
 
@@ -82,72 +81,77 @@ A node instance stored in `NodeTreeData.nodes`.
 - **`ENodeShape`** (editor canvas shapes): `Circle`, `Square`, `Triangle`, `Diamond`, `HorizontalCapsule`, `Parallelogram`, `Pentagon`, `Hexagon`, `Octagon`, `Star`.
 - **`LineTypeData`**: `lineType` (`ELineType`: `Straight` / `Curve` / `Polyline`), `lineWidth` (pixels), `material` (line material; pair it with `NodeTree/NodeLineFlow` for a flow effect).
 
-### Condition data `ConditionData` / `ConditionGroupData`
+### State tags `NodeTagData` / tag rules `NodeTagRule`
 
-- `ConditionData`: a single condition — `conditionType` (references `NodeConditionTypeData.conditionType`), `comparison` (`EConditionComparison`: `Equal` / `NotEqual` / `Greater` / `Less`), `conditionParam` (parameter string passed to the checker).
-- `ConditionGroupData`: a group — `satisfyType` (`EConditionSatisfyType` All/Any) + `conditions` (`List<ConditionData>`). An empty group is treated as no restriction (always passes).
-- `NodeConditionTypeData`: condition-type metadata (`conditionType` + `description`), pre-registered in `NodeTreeData` for editor display / selection.
+- `NodeTagData`: one entry in the tree-wide tag vocabulary — `tagName`, `description`, `color` (editor display tint), `autoRefresh` (whether `RefreshAllNodeStates` recomputes this tag from its condition). Built-in `Unlock` (`autoRefresh = true`) and `Finished` (`autoRefresh = false`); add your own freely.
+- `NodeTagRule`: a per-node, per-tag rule — `tagName` + `condition` (`ConditionExpression`, `com.ale.toolkit`). The `condition` is the gate for attaching that tag **on this node**; an empty expression means no gate (always passes). Rules are kept in sync with the vocabulary via `NodeData.RebuildTagRules`, and fetched via `NodeData.GetTagRule(tagName)`.
 - Node custom attributes: the template side `NodeTypeData.attributes` (`List<AttributeDefinition>`, `com.ale.toolkit`) defines the field schema; the instance side `NodeData.attributeValues` (`List<AttributeEntry>`) holds the values, kept in sync via `NodeData.RebuildAttributes`.
 
 ---
 
-## Condition system
+## Condition system: `Ale.Condition` (toolkit) + built-in evaluators
 
-Decides whether a node meets its unlock conditions. Logic is decoupled from data: the data layer only describes `conditionType` + `comparison` + `conditionParam`, while the actual judgement is performed by checkers registered with `NodeConditionManager`.
+Conditions are **not** a bespoke system anymore — node-tree wires directly into `com.ale.toolkit` **1.4.0**'s Condition System (`Ale.Condition`). The runtime depends on `Ale.Condition.Core` / `Ale.Condition.Runtime`, the editor on `Ale.Condition.Editor`.
 
-- **`INodeConditionChecker`**: `string ConditionType { get; }` + `bool Check(string conditionParam, EConditionComparison comparison, object context)`.
-- **`NodeConditionManager`** (static singleton): `Register(INodeConditionChecker)` / `Unregister(string conditionType)` / `Check(conditionType, conditionParam, comparison, context)` (returns `true` when `conditionType` is empty or unregistered, i.e. non-blocking). Built-in checkers are auto-registered on first access.
-- **Built-in checkers**: `NodeUnlockedChecker` (`conditionType = "NodeUnlocked"`, reads `NodeTreeSaveDataManager.IsNodeUnlocked`) and `NodeFinishedChecker` (`"NodeFinished"`, reads `IsNodeFinished`); `conditionParam` is the target node's `nodeId`.
+- **`ConditionExpression`** carries a condition as a two-level AND/OR tree (expression → groups → items → params). It is what every `NodeTagRule.condition` stores, and what the node inspector edits inline.
+- **Extension point** is toolkit's `Ale.Condition.IConditionEvaluator`: implement it and tag the class with `[ConditionEvaluator("Key")]` — evaluators are **auto-discovered and registered**, and appear in the editor's condition dropdown. An evaluator reads its data source through `ctx.GetService<T>()`.
 
-**Custom condition** (e.g. unlock only when level is high enough):
+**node-tree built-in evaluators** (namespace `Ale.NodeTree.Runtime`; all implement `IConditionEvaluator`, auto-register at runtime, selectable in the editor):
+
+- **`NodeFinishedEvaluator`** — key `NodeTree.NodeFinished`, param `target` (a node ID) → whether the target node carries the `Finished` tag.
+- **`NodeUnlockedEvaluator`** — key `NodeTree.NodeUnlocked`, param `target` → whether the target node carries the `Unlock` tag.
+- **`NodeHasTagEvaluator`** — key `NodeTree.NodeHasTag`, params `target` + `tag` → whether the target node carries the named tag.
+
+These evaluators read state through **`INodeTreeStateSource`** (`bool HasTag(string nodeId, string tag)`), implemented by the save manager and exposed via **`NodeTreeConditionContext : IConditionContext`**. Tag-name constants live in **`NodeTreeTags`** (`NodeTreeTags.Unlock` / `NodeTreeTags.Finished`).
+
+**Custom evaluator** (e.g. unlock only when level is high enough):
 
 ```csharp
-public class LevelChecker : INodeConditionChecker
+[ConditionEvaluator("NodeTree.PlayerLevel")]
+public sealed class PlayerLevelEvaluator : IConditionEvaluator
 {
-    public string ConditionType => "PlayerLevel";
+    public string Key => "NodeTree.PlayerLevel";
+    public string DisplayName => "Player Level";
+    public string Category => "NodeTree";
+    public IReadOnlyList<ConditionParamDef> ParamSchema => _schema; // declare the param schema
 
-    // conditionParam = required level; context is passed in by the caller (here, the player level)
-    public bool Check(string conditionParam, EConditionComparison comparison, object context)
+    // Read state via ctx.GetService<T>() (e.g. INodeTreeStateSource, or your own service)
+    public bool Evaluate(IReadOnlyList<ConditionParam> parameters, IConditionContext ctx)
     {
-        int need = int.Parse(conditionParam);
-        int level = (int)context;
-        return comparison switch
-        {
-            EConditionComparison.Greater  => level >  need,
-            EConditionComparison.Less     => level <  need,
-            EConditionComparison.NotEqual => level != need,
-            _                             => level >= need,
-        };
+        int need   = parameters[0].AsInt();
+        int level  = ctx.GetService<IPlayerStats>().Level;
+        return level >= need;
     }
 }
-
-// Register once at game startup
-NodeConditionManager.Instance.Register(new LevelChecker());
-
-// Evaluate (context is forwarded to every checker)
-bool unlocked = node.IsUnlock(context: player.Level);
+// Discovered automatically via [ConditionEvaluator]; no manual registration needed.
 ```
 
 ---
 
 ## Save `NodeTreeSaveDataManager`
 
-A static singleton that tracks each node's **unlocked / finished** state. It **does not derive from MonoBehaviour and does not auto-save** — an external game save system reads/writes it; the plugin only owns the runtime state and its serialization.
+A static singleton that tracks each node's **tags**. It implements `INodeTreeStateSource`, **does not derive from MonoBehaviour and does not auto-save** — an external game save system reads/writes it; the plugin only owns the runtime state and its serialization.
 
-- **Query**: `bool IsNodeUnlocked(string nodeId)`, `bool IsNodeFinished(string nodeId)`.
-- **Mutate**: `void SetNodeUnlocked(string nodeId, bool)`, `void SetNodeFinished(string nodeId, bool)`.
-- **Save integration**: `NodeTreeSaveData GetSaveData()` (deep copy), `void SetSaveData(NodeTreeSaveData)` (overwrite; `null` is ignored). Data shape `NodeTreeSaveData { List<string> unlockedNodeIds; List<string> finishedNodeIds; }`.
-- **JSON**: `string SerializeToJson()`, `void DeserializeFromJson(string)` (via `JsonUtility`, zero external dependency).
-- **Reset**: `void Reset()` (clears all records, for "new game").
+- **Generic tag ops**: `bool HasTag(string nodeId, string tag)`, `void AddTag(string nodeId, string tag)`, `void RemoveTag(string nodeId, string tag)`, `IReadOnlyCollection<string> GetTags(string nodeId)`, `void ClearNode(string nodeId)`.
+- **Whole-state & serialization**: `NodeTreeSaveData Get()` / `void Set(NodeTreeSaveData)`, `string Save()` (JSON) / `void Load(string json)`, `void Reset()` (clears all records, for "new game"). Actual persistence is left to the host. Data shape `NodeTreeSaveData { List<NodeTagState> nodes }`, where `NodeTagState { string nodeId; List<string> tags; }`.
+- **Convenience façade** (each self-evaluates the tag's condition and returns whether the tag was set): `bool TrySetTag(NodeTreeData config, string nodeId, string tag)`, `bool TrySetUnlock(NodeTreeData config, string nodeId)`, `bool TrySetFinished(NodeTreeData config, string nodeId)`.
+- **Auto-refresh**: `void RefreshAllNodeStates(NodeTreeData config)` recomputes every `autoRefresh` tag from its condition and attaches it — set once achieved, monotonic (never removed), and iterated to a fixed point so chained unlocks resolve in one call.
 
 ```csharp
-var mgr = NodeTreeSaveDataManager.Instance;
-mgr.SetNodeUnlocked("node_02", true);
-mgr.SetNodeFinished("node_01", true);
+var save = NodeTreeSaveDataManager.Instance;
 
-string json = mgr.SerializeToJson();   // hand off to your save system
-// ...on load:
-mgr.DeserializeFromJson(json);
+// Push a state at the right gameplay moment: it self-evaluates that tag's
+// condition and returns whether it was set (a Finished condition is usually empty = passes directly).
+save.TrySetFinished(config, "chapter_01");   // finished reading this chapter → mark Finished
+
+// After opening the panel / loading a save, refresh every auto tag
+// (Unlock cascades from the finished state of prerequisites).
+save.RefreshAllNodeStates(config);
+bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
+
+// Save round-trip (persistence is the host's job)
+string json = save.Save();
+save.Load(json);
 ```
 
 ---
@@ -161,9 +165,10 @@ The runtime node-tree UI window (a standalone `MonoBehaviour`). Attach it to a U
 - Automatically **computes and sets the root container Size** from node positions / sizes;
 - **Pools node UI per node type** (via `ToolkitGameObjectPool` from `com.ale.toolkit`) and **Spawns / Despawns on demand through viewport culling**;
 - **Merges a line mesh per node type** (fewer draw calls); UVs pair with `NodeTree/NodeLineFlow` for the flow effect;
-- Rebuilds lines on demand in `LateUpdate` via a dirty flag.
+- Rebuilds lines on demand in `LateUpdate` via a dirty flag;
+- When `refreshStatesOnInit` is on, `InitTree` calls `RefreshAllNodeStates` so auto tags (e.g. `Unlock`) resolve on open.
 
-**Main API**: `InitTree(NodeTreeData configOverride = null)` (initialize / rebuild the whole tree), `SelectNode(string nodeId)`, `RefreshVisibility()` (recompute viewport culling), `MarkLineDirty()` (flag lines for rebuild).
+**Main API**: `InitTree(NodeTreeData configOverride = null)` (initialize / rebuild the whole tree), `SelectNode(string nodeId)`, `RefreshVisibility()` (recompute viewport culling), `MarkLineDirty()` (flag lines for rebuild), `RefreshAllNodeStates()` (recompute auto tags via `NodeTreeSaveDataManager`).
 
 ### `UINodeBase`
 
@@ -187,7 +192,9 @@ A static line-mesh builder (usable at runtime): `BuildCombinedLineMesh(segments,
 
 Open via `Tools > NodeTree > Node Tree Editor` (or the "Edit in Node Tree Editor" button on a `NodeTreeData` asset's Inspector).
 
-- **`NodeTreeEditorWindow`** (`EditorWindow`, IMGUI + GL): three-column layout — left **node-type / condition-type management**, center **canvas** (drag / zoom / pan / connect nodes), right **node property panel**; supports adding/deleting nodes, cutting subtrees, and auto-layout. All edits go through `Undo.RecordObject` + `EditorUtility.SetDirty`, so the window is **fully Undo / Redo aware and persists the asset**. Canvas pan / zoom / last-opened config are persisted via `EditorPrefs`.
+- **`NodeTreeEditorWindow`** (`EditorWindow`, IMGUI + GL): three-column layout — left **node-type / tag management**, center **canvas** (drag / zoom / pan / connect nodes), right **node property panel**; supports adding/deleting nodes, cutting subtrees, and auto-layout. All edits go through `Undo.RecordObject` + `EditorUtility.SetDirty`, so the window is **fully Undo / Redo aware and persists the asset**. Canvas pan / zoom / last-opened config are persisted via `EditorPrefs`.
+  - The left **Tags** tab manages the `NodeTreeData.tags` vocabulary and has a **Tag settings** block on top with an **"auto-write Unlock condition"** toggle. This is a project-level setting stored in `ProjectSettings/NodeTreeEditorSettings.asset` (shared through version control): when on, adding a child node / drawing a connection on the canvas automatically writes a `NodeTree.NodeFinished(target = parentId)` condition into the child's `Unlock` rule.
+  - The right **node property panel** edits each tag's gating condition inline, drawing the `NodeTagRule.condition` with toolkit's `ConditionExpression` inline drawer.
 - **`NodeDrawer`** (static): draws node shapes (circle / square / polygon, etc.) and connections (straight / bezier / polyline) with IMGUI + GL, during `Repaint` only.
 - **`NodeTreeCanvasState`**: canvas interaction state (pan / zoom / selection / drag) and canvas↔screen coordinate conversion.
 - **`NodeTreeDataEditor`**: a custom Inspector for `NodeTreeData` that adds an "Edit in Node Tree Editor" button on top.

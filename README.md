@@ -25,7 +25,7 @@
 # Ale Node Tree - 节点树系统
 
 Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于搭建并展示**技能树 / 科技树 / 关卡进度树 / 剧情推进树**等一切「节点 + 连线 + 解锁条件」结构。
-用一个 `NodeTreeData` 资产集中配置**节点、节点类型、解锁条件与画布布局**；配套一个**可视化编辑器**（画布拖拽 / 缩放 / 平移 / 连线，全程 Undo / Redo）与一套**开箱即用的运行时 UI**（按节点类型对象池化、视口裁剪、URP 流光连线）。节点的**已解锁 / 已完成**状态由存档管理器维护，解锁条件通过**可扩展的条件检查器**判定——判断逻辑与配置数据解耦，无需改数据结构即可接入任意游戏规则。
+用一个 `NodeTreeData` 资产集中配置**节点、节点类型、标签与画布布局**；配套一个**可视化编辑器**（画布拖拽 / 缩放 / 平移 / 连线，全程 Undo / Redo）与一套**开箱即用的运行时 UI**（按节点类型对象池化、视口裁剪、URP 流光连线）。节点的**已解锁 / 已完成**等状态以**标签(Tag)**承载、由存档管理器维护；每个标签的挂载条件基于 `com.ale.toolkit` 的**条件系统**（`Ale.Condition`）用 `ConditionExpression` 描述，判定交给**可扩展的判定器**（`IConditionEvaluator`）——判断逻辑与配置数据解耦，无需改数据结构即可接入任意游戏规则。
 
 ## 📜 目录
 - [Ale Node Tree - 节点树系统](#ale-node-tree---节点树系统)
@@ -47,29 +47,29 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 很多游戏都需要一套「节点 + 连线 + 解锁条件」的树状结构——技能树、科技树、关卡进度、剧情推进……但每次都要从零处理编辑器绘制、连线渲染、视口性能与解锁判定，成本很高。Ale Node Tree 把它们收拢到**同一份数据资产**与**同一套工具链**下：
 
 1. **可视化编辑** —— 一个 `NodeTreeData` 承载整棵树，编辑器为「左侧类型管理 + 中央画布（拖拽 / 缩放 / 平移 / 连线）+ 右侧属性面板」的三列布局，IMGUI + GL 实时绘制节点形状与连线，全程 Undo / Redo。
-2. **数据驱动的解锁** —— 每个节点可配置多个条件组（组间 AND / OR、组内 AND / OR），条件判定交给注册到 `NodeConditionManager` 的检查器；内置「已解锁 / 已完成」检查器，自定义规则只需实现一个接口。
+2. **数据驱动的解锁** —— 每个节点为其每个标签配置一条挂载条件，用 `com.ale.toolkit` 条件系统的 `ConditionExpression`（两级 AND / OR：表达式 → 组 → 项）描述；判定交给自动注册的判定器 `IConditionEvaluator`，内置「已完成 / 已解锁 / 是否挂某标签」，自定义规则只需实现一个接口并打特性。
 3. **高性能运行时** —— 运行时 UI 按节点类型对象池化，视口裁剪按需 Spawn / Despawn，连线 Mesh 按类型合批以降低 DrawCall；配套 URP 流光连线 Shader。
-4. **易接入存档** —— `NodeTreeSaveDataManager` 维护解锁 / 完成状态并支持 JSON 序列化，`GetSaveData` / `SetSaveData` 对接任意游戏存档系统。
+4. **易接入存档** —— `NodeTreeSaveDataManager` 以标签制维护各节点状态并支持 JSON 序列化，`Save()` / `Load()` / `Get()` / `Set()` 对接任意游戏存档系统（落盘交宿主）。
 5. **底层集成，非硬绑定** —— 节点名 / 描述本地化由底层 `com.ale.toolkit` 的 `AttributeValue`(Text) 承载（项目启用 toolkit 的 `ATK_LOCALIZATION` 时取多语文本，否则纯文本回退，插件本身无需本地化宏）；悬停弹窗淡入淡出内置（基于 `com.ale.toolkit` 中央 Tween）；对象池复用 `com.ale.toolkit`。
 
 ### 项目特性
 | 特性 | 描述 |
 | --- | --- |
-| 单资产集中配置 | 一个 `NodeTreeData` 承载全部节点、节点类型、条件类型与画布布局；编辑器仅在 ScriptableObject 上工作，全程 Undo / Redo。 |
+| 单资产集中配置 | 一个 `NodeTreeData` 承载全部节点、节点类型、标签与画布布局；编辑器仅在 ScriptableObject 上工作，全程 Undo / Redo。 |
 | 可视化编辑器 | 三列布局 + 画布拖拽 / 缩放 / 平移 / 连线；节点增删、子树切除、自动布局；IMGUI + GL 绘制 10 种节点形状与直线 / 曲线 / 折线连线。 |
-| 可扩展条件系统 | 数据只描述 `conditionType` + 比较方式 + 参数，判定由 `INodeConditionChecker` 完成；内置「已解锁 / 已完成」，自定义规则一接口即可接入。 |
+| 可扩展条件系统 | 挂载条件用 `com.ale.toolkit` 的 `ConditionExpression` 描述，判定由 `IConditionEvaluator` 完成（打 `[ConditionEvaluator("Key")]` 自动注册）；内置「已完成 / 已解锁 / 是否挂某标签」，自定义规则一接口即可接入。 |
 | 高性能运行时 UI | 按节点类型对象池化（基于 `com.ale.toolkit`），视口裁剪按需 Spawn / Despawn，连线 Mesh 合批降 DrawCall。 |
 | URP 流光连线 | `NodeTree/NodeLineFlow` 透明流光 Shader（流动纹理 / 边缘渐变 / 辉光 / HDR 颜色），按节点类型独立配连线样式。 |
-| 存档友好 | `NodeTreeSaveDataManager` 维护解锁 / 完成状态，JSON 序列化，`GetSaveData` / `SetSaveData` 对接外部存档。 |
+| 存档友好 | `NodeTreeSaveDataManager` 以标签制维护各节点状态，JSON 序列化，`Save()` / `Load()` / `Get()` / `Set()` 对接外部存档。 |
 | 底层集成 | 节点名 / 描述本地化经 `com.ale.toolkit` 的 `AttributeValue`(Text)（启用 `ATK_LOCALIZATION` 取多语、否则纯文本）；悬停弹窗淡入淡出基于 `com.ale.toolkit` 中央 Tween；对象池复用 `com.ale.toolkit`。插件本身无本地化 / DOTween 宏。 |
 
 ### 模块一览
 | 模块 | 职责 | 主要类型 |
 | --- | --- | --- |
 | **配置** | 节点树配置资产 | `NodeTreeData` |
-| **数据** | 节点 / 类型 / 条件 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`ConditionData`、`ConditionGroupData`、`NodeConditionTypeData` |
-| **条件** | 解锁判定与扩展 | `INodeConditionChecker`、`NodeConditionManager` |
-| **存档** | 已解锁 / 已完成状态 | `NodeTreeSaveDataManager` |
+| **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
+| **条件与状态** | 挂载条件与判定 | `ConditionExpression`(Toolkit)、`INodeTreeStateSource`、`NodeTreeConditionContext`、内置判定器 `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
+| **存档** | 节点标签状态 | `NodeTreeSaveDataManager` |
 | **运行时 UI** | 节点树展示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
@@ -115,10 +115,10 @@ https://github.com/AleFeng/unity-ale-node-tree.git?path=/Packages/com.ale.nodetr
 ```
 Project 面板右键 > Create > NodeTree System/Config Node Tree
 ```
-新建的 `NodeTreeData` 会自动带上内置节点类型（普通 / 结局）、内置条件类型（NodeUnlocked / NodeFinished）与一个起始节点。
+新建的 `NodeTreeData` 会自动带上内置节点类型（普通 / 结局）、内置状态标签（`Unlock` / `Finished`）与一个起始节点。
 
 **2. 可视化编辑**
-选中该 `.asset`，在 Inspector 顶部点「在 Node Tree Editor 中编辑」，或菜单 `Tools > NodeTree > Node Tree Editor`。在左侧管理**节点类型**（形状 / 颜色 / 尺寸 / UI 预制体 / 连线样式）与**条件类型**；在中央画布拖拽节点、连线构建父子关系；在右侧属性面板为节点配置 ID、图标、解锁条件组与自定义属性（字段 schema 在节点类型上定义）。
+选中该 `.asset`，在 Inspector 顶部点「在 Node Tree Editor 中编辑」，或菜单 `Tools > NodeTree > Node Tree Editor`。在左侧管理**节点类型**（形状 / 颜色 / 尺寸 / UI 预制体 / 连线样式）与**标签**；在中央画布拖拽节点、连线构建父子关系；在右侧属性面板为节点配置 ID、图标、各标签的挂载条件与自定义属性（字段 schema 在节点类型上定义）。
 
 **3. 运行时挂载**
 给 UI 根节点添加 `UINodeTreeWindow` 组件，把 `NodeTreeData` 拖到 `config`、指定内容根容器，运行时调用 `InitTree()` 即按节点数据生成对象池化的节点 UI 与合批连线。
@@ -137,17 +137,18 @@ someNodeUI.Clicked += ui => Debug.Log($"点击了节点 {ui.nodeData.nodeId}");
 ```csharp
 using Ale.NodeTree.Runtime;
 
-// 自定义解锁条件（游戏启动时注册一次）
-NodeConditionManager.Instance.Register(new MyLevelChecker());
-
-// 查询某节点是否已解锁（context 透传给各条件检查器）
-bool unlocked = node.IsUnlock(context: player.Level);
-
-// 解锁 / 完成状态 + 存档
 var save = NodeTreeSaveDataManager.Instance;
-save.SetNodeUnlocked("node_02", true);
-string json = save.SerializeToJson();   // 交给你的存档系统持久化
-save.DeserializeFromJson(json);          // 读档时覆盖
+
+// 业务时机主动置状态：内部自判该标签的条件，返回是否设置成功
+save.TrySetFinished(config, "chapter_01");   // 读完本章→置完成（Finished 条件通常为空=直接通过）
+
+// 打开面板 / 加载存档后刷新所有自动标签（Unlock 按前置完成情况链式解锁）
+save.RefreshAllNodeStates(config);
+bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
+
+// 存档往返（落盘交宿主）
+string json = save.Save();
+save.Load(json);
 ```
 
 **5. 体验 Demo**
@@ -164,9 +165,9 @@ Packages/com.ale.nodetree/           ← 包根
 ├── package.json  CHANGELOG.md  LICENSE.md  README.md   ← 详细使用文档（三语）
 ├── Runtime/
 │   ├── Config/      节点树配置资产 NodeTreeData
-│   ├── Data/        数据模型（NodeData / NodeTypeData / LineTypeData / Condition*）
-│   ├── Conditions/  条件系统（INodeConditionChecker / NodeConditionManager / 内置检查器）
-│   ├── Save/        存档管理器 NodeTreeSaveDataManager
+│   ├── Data/        数据模型（NodeData / NodeTypeData / LineTypeData / NodeTagData / NodeTagRule）
+│   ├── Conditions/  条件接入（INodeTreeStateSource / NodeTreeConditionContext / NodeTreeTags / Evaluators：NodeFinished · NodeUnlocked · NodeHasTag）
+│   ├── Save/        存档管理器 NodeTreeSaveDataManager（标签制）
 │   ├── UI/          运行时 UI（UINodeTreeWindow / UINodeBase）
 │   └── Utility/     连线 Mesh 构建 NodeLineBuilder
 ├── Editor/          可视化编辑器（NodeTreeEditorWindow / NodeDrawer / NodeTreeCanvasState / NodeTreeDataEditor）

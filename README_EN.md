@@ -25,7 +25,7 @@
 # Ale Node Tree
 
 Ale Node Tree is a **visual node-tree plugin** for `Unity`, for building and displaying any "nodes + connections + unlock conditions" structure — **skill trees / tech trees / level-progression trees / story-progression trees**, and more.
-One `NodeTreeData` asset centralizes **nodes, node types, unlock conditions, and canvas layout**; it ships with a **visual editor** (drag / zoom / pan / connect on a canvas, fully Undo / Redo aware) and a set of **ready-to-use runtime UI** (per-type object pooling, viewport culling, URP flowing-line shader). Each node's **unlocked / finished** state is maintained by a save manager, and unlock conditions are evaluated through **pluggable condition checkers** — the judgement logic is decoupled from the config data, so you can plug in any game rule without changing the data model.
+One `NodeTreeData` asset centralizes **nodes, node types, status tags, and canvas layout**; it ships with a **visual editor** (drag / zoom / pan / connect on a canvas, fully Undo / Redo aware) and a set of **ready-to-use runtime UI** (per-type object pooling, viewport culling, URP flowing-line shader). Each node's state is carried by **tags** (built-in **Unlock / Finished**) maintained by a save manager, and the gate to attach a tag is expressed with **`com.ale.toolkit`'s Condition System** (`ConditionExpression`) and evaluated through **pluggable condition evaluators** — the judgement logic is decoupled from the config data, so you can plug in any game rule without changing the data model.
 
 ## 📜 Table of Contents
 - [Ale Node Tree](#ale-node-tree)
@@ -47,29 +47,29 @@ One `NodeTreeData` asset centralizes **nodes, node types, unlock conditions, and
 Many games need a "nodes + connections + unlock conditions" tree — skill trees, tech trees, level progression, story progression… but rebuilding editor drawing, connection rendering, viewport performance, and unlock evaluation from scratch every time is costly. Ale Node Tree gathers them into **one data asset** and **one toolchain**:
 
 1. **Visual editing** — one `NodeTreeData` holds the whole tree; the editor is a three-column layout (left type management + center canvas with drag / zoom / pan / connect + right property panel), drawing node shapes and connections in real time with IMGUI + GL, fully Undo / Redo aware.
-2. **Data-driven unlocking** — each node can hold multiple condition groups (AND / OR across groups, AND / OR within a group); evaluation is delegated to checkers registered with `NodeConditionManager`; built-in "unlocked / finished" checkers, and a custom rule is just one interface away.
+2. **Data-driven unlocking** — each node carries one rule per status tag whose gate is a `ConditionExpression` (two-level AND / OR: expression → group → item); evaluation is delegated to **condition evaluators** (Toolkit `Ale.Condition`); built-in `NodeFinished` / `NodeUnlocked` / `NodeHasTag` evaluators, and a custom rule is just one interface away.
 3. **High-performance runtime** — runtime UI is pooled per node type, Spawned / Despawned on demand via viewport culling, and line meshes are batched per type to cut draw calls; a URP flowing-line shader is included.
-4. **Save-friendly** — `NodeTreeSaveDataManager` tracks unlocked / finished state with JSON serialization; `GetSaveData` / `SetSaveData` plug into any game save system.
+4. **Save-friendly** — `NodeTreeSaveDataManager` tracks each node's **tags** with JSON serialization; `Get()` / `Set()` / `Save()` / `Load()` plug into any game save system.
 5. **Built on the base package, not hard-bound** — node name / description localization is carried by `com.ale.toolkit`'s `AttributeValue`(Text) (localized when the project enables toolkit's `ATK_LOCALIZATION`, otherwise plain-text fallback; the plugin itself needs no localization macro); the hover popup fade in/out is built in (via `com.ale.toolkit`'s central tween); object pooling reuses `com.ale.toolkit`.
 
 ### Features
 | Feature | Description |
 | --- | --- |
-| Single-asset config | One `NodeTreeData` holds all nodes, node types, condition types, and canvas layout; the editor works only on the ScriptableObject, fully Undo / Redo. |
+| Single-asset config | One `NodeTreeData` holds all nodes, node types, status tags, and canvas layout; the editor works only on the ScriptableObject, fully Undo / Redo. |
 | Visual editor | Three-column layout + canvas drag / zoom / pan / connect; add/delete nodes, cut subtrees, auto-layout; IMGUI + GL draws 10 node shapes and straight / curve / polyline connections. |
-| Extensible conditions | Data only describes `conditionType` + comparison + parameter; judgement is done by `INodeConditionChecker`; built-in "unlocked / finished", custom rules via a single interface. |
+| Extensible conditions | Each status tag's gate is a `ConditionExpression`; judgement is done by `IConditionEvaluator` (Toolkit `Ale.Condition`); built-in `NodeFinished` / `NodeUnlocked` / `NodeHasTag`, custom rules via a single interface. |
 | High-performance runtime UI | Object pooling per node type (via `com.ale.toolkit`), on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls. |
 | URP flowing lines | `NodeTree/NodeLineFlow` transparent flow shader (flow texture / edge fade / glow / HDR color); line style is configured per node type. |
-| Save-friendly | `NodeTreeSaveDataManager` tracks unlocked / finished state, JSON serialization, `GetSaveData` / `SetSaveData` for external saves. |
+| Save-friendly | `NodeTreeSaveDataManager` tracks each node's tags, JSON serialization, `Get()` / `Set()` / `Save()` / `Load()` for external saves. |
 | Base-package integration | Node name / description localization via `com.ale.toolkit`'s `AttributeValue`(Text) (multilingual when `ATK_LOCALIZATION` is on, else plain text); hover popup fade via `com.ale.toolkit`'s central tween; object pooling via `com.ale.toolkit`. The plugin itself has no localization / DOTween macro. |
 
 ### Modules
 | Module | Responsibility | Key types |
 | --- | --- | --- |
 | **Config** | Node-tree config asset | `NodeTreeData` |
-| **Data** | Node / type / condition / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `ConditionData`, `ConditionGroupData`, `NodeConditionTypeData` |
-| **Conditions** | Unlock evaluation & extension | `INodeConditionChecker`, `NodeConditionManager` |
-| **Save** | Unlocked / finished state | `NodeTreeSaveDataManager` |
+| **Data** | Node / type / line / tag / tag rule | `NodeData`, `NodeTypeData`, `LineTypeData`, `NodeTagData`, `NodeTagRule` |
+| **Conditions & state** | Condition evaluation & extension | `ConditionExpression` (Toolkit), `INodeTreeStateSource`, `NodeFinishedEvaluator` / `NodeUnlockedEvaluator` / `NodeHasTagEvaluator` |
+| **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
 | **Runtime UI** | Node-tree presentation | `UINodeTreeWindow`, `UINodeBase`, `NodeLineBuilder` |
 | **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 
@@ -115,10 +115,10 @@ The shortest path below; **see the [documentation](#-documentation) for full mod
 ```
 Project panel right-click > Create > NodeTree System/Config Node Tree
 ```
-A new `NodeTreeData` is auto-seeded with built-in node types (Normal / Ending), built-in condition types (NodeUnlocked / NodeFinished), and a start node.
+A new `NodeTreeData` is auto-seeded with built-in node types (Normal / Ending), built-in status tags (Unlock / Finished), and a start node.
 
 **2. Edit visually**
-Select the `.asset` and click "Edit in Node Tree Editor" at the top of the Inspector, or use `Tools > NodeTree > Node Tree Editor`. Manage **node types** (shape / color / size / UI prefab / line style) and **condition types** on the left; drag nodes and connect them to build parent–child links on the center canvas; configure a node's ID, icon, unlock condition groups, and custom data on the right property panel.
+Select the `.asset` and click "Edit in Node Tree Editor" at the top of the Inspector, or use `Tools > NodeTree > Node Tree Editor`. Manage **node types** (shape / color / size / UI prefab / line style) and **tags** on the left; drag nodes and connect them to build parent–child links on the center canvas; configure a node's ID, icon, per-tag conditions, and custom attributes on the right property panel.
 
 **3. Mount at runtime**
 Add a `UINodeTreeWindow` component to a UI root, drag the `NodeTreeData` into `config`, assign the content root container, and call `InitTree()` at runtime to spawn pooled node UI and batched connections from the node data.
@@ -137,17 +137,18 @@ someNodeUI.Clicked += ui => Debug.Log($"Clicked node {ui.nodeData.nodeId}");
 ```csharp
 using Ale.NodeTree.Runtime;
 
-// Custom unlock condition (register once at game startup)
-NodeConditionManager.Instance.Register(new MyLevelChecker());
-
-// Query whether a node is unlocked (context is forwarded to every checker)
-bool unlocked = node.IsUnlock(context: player.Level);
-
-// Unlocked / finished state + saving
 var save = NodeTreeSaveDataManager.Instance;
-save.SetNodeUnlocked("node_02", true);
-string json = save.SerializeToJson();   // persist via your save system
-save.DeserializeFromJson(json);          // overwrite on load
+
+// Set state on your own timing: the tag's own condition is checked internally, returns whether it was set
+save.TrySetFinished(config, "chapter_01");   // finished this chapter (a Finished condition is usually empty = passes directly)
+
+// After opening the panel / loading a save, refresh all auto tags (Unlock unlocks in chains by prerequisite completion)
+save.RefreshAllNodeStates(config);
+bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
+
+// Save round-trip (the host persists the string)
+string json = save.Save();
+save.Load(json);
 ```
 
 **5. Try the Demo**
@@ -164,8 +165,8 @@ Packages/com.ale.nodetree/           ← package root
 ├── package.json  CHANGELOG.md  LICENSE.md  README.md   ← in-package docs (trilingual)
 ├── Runtime/
 │   ├── Config/      node-tree config asset NodeTreeData
-│   ├── Data/        data model (NodeData / NodeTypeData / LineTypeData / Condition*)
-│   ├── Conditions/  condition system (INodeConditionChecker / NodeConditionManager / built-in checkers)
+│   ├── Data/        data model (NodeData / NodeTypeData / LineTypeData / NodeTagData / NodeTagRule)
+│   ├── Conditions/  node-tree condition hookup (INodeTreeStateSource / NodeTreeConditionContext / NodeTreeTags / Evaluators: NodeFinished · NodeUnlocked · NodeHasTag)
 │   ├── Save/        save manager NodeTreeSaveDataManager
 │   ├── UI/          runtime UI (UINodeTreeWindow / UINodeBase)
 │   └── Utility/     line mesh builder NodeLineBuilder
