@@ -2083,6 +2083,16 @@ namespace Ale.NodeTree.Editor
             if (fromNode == null || toNode == null) return;
             if (fromNode.childNodeIds.Contains(toId)) return; // 连线已存在
 
+            // 环检测：若 toId 能到达 fromId（fromId 在 toId 的子树内），添加 from→to 会形成环，拒绝。
+            var reach = new HashSet<string>();
+            CollectSubtreeIds(toId, reach);
+            if (reach.Contains(fromId))
+            {
+                EditorUtility.DisplayDialog("无法连线",
+                    $"添加从 [{fromId}] 到 [{toId}] 的连线会形成环（[{toId}] 已能到达 [{fromId}]）。", "确定");
+                return;
+            }
+
             Undo.RecordObject(_config, "添加连线");
             fromNode.childNodeIds.Add(toId);
 
@@ -2208,10 +2218,11 @@ namespace Ale.NodeTree.Editor
                            || _config.layoutDirection == ELayoutDirection.Bottom2Top;
 
             float crossCursor = 0f;
+            var visited = new HashSet<string>(); // 跨所有根共享：防回边成环无限递归，且多父钻石节点只布局一次
 
             foreach (var root in roots)
             {
-                LayoutSubtree(root, 0, horizontal, ref crossCursor);
+                LayoutSubtree(root, 0, horizontal, ref crossCursor, visited);
                 crossCursor += horizontal ? NodeAutoSpacingY : NodeAutoSpacingX; // 多根节点之间留间距
             }
 
@@ -2244,9 +2255,11 @@ namespace Ale.NodeTree.Editor
         ///     因此 position.y = -(crossCursor + nodeCross * 0.5f)。
         ///   - Bottom2Top / Right2Left 的 reverse 翻转逻辑在 RunAutoLayout 中处理，此处无需关心。
         /// </summary>
-        private void LayoutSubtree(NodeData node, int depth, bool horizontal, ref float crossCursor)
+        private void LayoutSubtree(NodeData node, int depth, bool horizontal, ref float crossCursor,
+                                   HashSet<string> visited)
         {
-            if (node == null) return;
+            // 已访问即跳过：防回边（环）无限递归导致 StackOverflow，且令多父钻石节点只布局一次（避免后写覆盖）
+            if (node == null || !visited.Add(node.nodeId)) return;
 
             var nodeType = _config.GetNodeType(node.nodeTypeRef);
             float nodeW = nodeType?.resolution.x ?? 80f;
@@ -2280,7 +2293,7 @@ namespace Ale.NodeTree.Editor
             {
                 var child = _config.GetNode(childId);
                 if (child == null) continue;
-                LayoutSubtree(child, depth + 1, horizontal, ref crossCursor);
+                LayoutSubtree(child, depth + 1, horizontal, ref crossCursor, visited);
             }
 
             // 以子节点占据范围的中心（去掉末尾间距）作为父节点的 cross 轴位置
