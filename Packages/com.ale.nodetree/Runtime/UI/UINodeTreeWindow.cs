@@ -44,6 +44,7 @@ namespace Ale.NodeTree.Runtime
         // 视口裁剪脏标记与上次刷新时的容器世界坐标 / 屏幕尺寸（用于按需刷新，避免每帧遍历全部节点）。
         private bool    _visibilityDirty = true;
         private Vector3 _lastContainerPos;
+        private Vector3 _lastContainerScale; // 上次刷新时容器世界缩放（缩放变化也触发重算）
         private Vector2 _lastScreenSize;
 
         // ── Unity 生命周期 ──
@@ -67,13 +68,17 @@ namespace Ale.NodeTree.Runtime
             if (_nodeContainer)
             {
                 Vector3 pos    = _nodeContainer.position;
+                Vector3 scale  = _nodeContainer.lossyScale;
                 Vector2 screen = new Vector2(Screen.width, Screen.height);
-                if (_visibilityDirty || pos != _lastContainerPos || screen != _lastScreenSize)
+                // 位置、缩放（如缩放画布 localScale）或屏幕尺寸变化时才重算，静止时不遍历全部节点
+                if (_visibilityDirty || pos != _lastContainerPos || scale != _lastContainerScale
+                    || screen != _lastScreenSize)
                 {
                     RefreshVisibility();
-                    _lastContainerPos = pos;
-                    _lastScreenSize   = screen;
-                    _visibilityDirty  = false;
+                    _lastContainerPos   = pos;
+                    _lastContainerScale = scale;
+                    _lastScreenSize     = screen;
+                    _visibilityDirty    = false;
                 }
             }
         }
@@ -171,6 +176,7 @@ namespace Ale.NodeTree.Runtime
         // 两者均使用 RectTransform stretch 模式，自动跟随 nodeTreeRoot 的 Size 变化。
         private RectTransform _lineContainer; // 连线 Mesh 层，firstSibling（渲染在节点之下）
         private RectTransform _nodeContainer; // 节点 UI 层，lastSibling（渲染在连线之上）
+        private Canvas        _rootCanvas;    // 所属 Canvas（缓存）：视口裁剪据其渲染模式选相机
         
         /// <summary>
         /// 确保 LineContainer 和 NodeContainer 已在 nodeTreeRoot 下创建。
@@ -225,6 +231,9 @@ namespace Ale.NodeTree.Runtime
             _nodeContainer.anchorMax = Vector2.one;
             _nodeContainer.offsetMin = Vector2.zero;
             _nodeContainer.offsetMax = Vector2.zero;
+
+            // 缓存所属 Canvas：视口裁剪据其渲染模式选择相机（Overlay=null，Camera/World=worldCamera）
+            _rootCanvas = _nodeContainer.GetComponentInParent<Canvas>();
         }
 
         /// <summary>
@@ -627,6 +636,9 @@ namespace Ale.NodeTree.Runtime
         [Tooltip("视口裁剪边缘缓冲（像素）：将裁剪范围向外扩展，避免节点在边缘出现闪烁。")]
         [SerializeField] private float cullPadding = 100f;
 
+        // 滞回额外边距（像素）：已激活节点的 despawn 边界 = cullPadding + 此值，比 spawn 边界更宽，消除边界抖动
+        private const float DespawnHysteresis = 80f;
+
         // 当前激活的节点UI：key = nodeId
         private readonly Dictionary<string, UINodeBase> _activeNodes
             = new Dictionary<string, UINodeBase>();
@@ -640,17 +652,16 @@ namespace Ale.NodeTree.Runtime
         public void RefreshVisibility()
         {
             if (!config || !nodeTreeRoot || !_nodeContainer) return;
-
-            // 屏幕边界（含裁剪缓冲）
-            var screenMin = new Vector2(-cullPadding, -cullPadding);
-            var screenMax = new Vector2(Screen.width + cullPadding, Screen.height + cullPadding);
-
-            // _nodeContainer.position 为世界坐标（Screen Space Overlay 下与屏幕像素一致）。
-            // 节点的 anchoredPosition = node.position + _nodePositionOffset，
-            // 因此节点屏幕坐标 = _nodeContainer.position.xy + node.position + _nodePositionOffset。
-            float containerX = _nodeContainer.position.x;
-            float containerY = _nodeContainer.position.y;
             if (config.nodes == null) return;
+
+            // 按 Canvas 渲染模式选裁剪相机：Overlay 用 null（世界坐标即屏幕像素），
+            // Camera/World 模式用 worldCamera 将节点世界坐标投影到屏幕。
+            Camera cullCam = (_rootCanvas && _rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                ? _rootCanvas.worldCamera
+                : null;
+
+            // 容器世界缩放（CanvasScaler scaleFactor≠1 或缩放画布时 ≠1），用于把节点半尺寸换算到屏幕像素
+            Vector3 lossy = _nodeContainer.lossyScale;
 
             // 检查所有节点是否在屏幕边界内，只为可见节点分配 UI 实例进行显示。
             _visibilitySeen.Clear();
@@ -661,16 +672,32 @@ namespace Ale.NodeTree.Runtime
                 // 重复 nodeId：仅处理首个，避免同一 id 的屏外副本把屏内实例反复 Spawn/Despawn 抖动
                 if (!_visibilitySeen.Add(node.nodeId)) continue;
 
-                // _nodeContainer.position是屏幕空间坐标，再加上 节点的局部坐标(包括局部偏移) 就能直接得到 节点的 屏幕空间坐标
-                float nodePosX = containerX + node.position.x + _nodePositionOffset.x;
-                float nodePosY = containerY + node.position.y + _nodePositionOffset.y;
-                // 判断节点中心点是否在屏幕边界内（含缓冲区）
-                bool visible = nodePosX >= screenMin.x && nodePosX <= screenMax.x && 
-                               nodePosY >= screenMin.y && nodePosY <= screenMax.y;
+                // 节点局部坐标 → 世界坐标（经容器世界矩阵，正确反映缩放/旋转）→ 屏幕像素（按渲染模式）。
+                // 不再把局部坐标直接加到容器世界坐标：旧法在 scaleFactor≠1 / Screen Space-Camera 下错位且随距离放大。
+                Vector3 local = new Vector3(node.position.x + _nodePositionOffset.x,
+                                            node.position.y + _nodePositionOffset.y, 0f);
+                Vector3 world = _nodeContainer.TransformPoint(local);
+                Vector2 sp    = cullCam ? (Vector2)cullCam.WorldToScreenPoint(world)
+                                        : new Vector2(world.x, world.y);
 
-                if (visible && !_activeNodes.ContainsKey(node.nodeId))
+                // 节点半尺寸（随容器缩放）转屏幕像素，做包围盒判定而非仅中心，避免大节点边缘尚在屏内即被误剔。
+                var type      = config.GetNodeType(node.nodeTypeRef);
+                Vector2 half  = (type != null ? type.resolution : new Vector2(80f, 80f)) * 0.5f;
+                float halfWpx = half.x * Mathf.Abs(lossy.x);
+                float halfHpx = half.y * Mathf.Abs(lossy.y);
+
+                // 滞回：已激活节点用更宽的 despawn 边距、未激活用更窄的 spawn 边距，消除边界处对象池抖动。
+                bool  wasActive = _activeNodes.ContainsKey(node.nodeId);
+                float margin    = cullPadding + (wasActive ? DespawnHysteresis : 0f);
+
+                bool visible = sp.x + halfWpx >= -margin
+                            && sp.x - halfWpx <= Screen.width  + margin
+                            && sp.y + halfHpx >= -margin
+                            && sp.y - halfHpx <= Screen.height + margin;
+
+                if (visible && !wasActive)
                     SpawnNode(node);
-                else if (!visible && _activeNodes.ContainsKey(node.nodeId))
+                else if (!visible && wasActive)
                     DespawnNode(node.nodeId);
             }
         }
