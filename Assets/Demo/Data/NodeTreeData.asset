@@ -41,6 +41,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 0, y: 0}
     attributeValues: []
+    tagRules: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0"
     - "\u5F00\u59CB\u8282\u70B9_1"
@@ -77,6 +78,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 260, y: -220}
     attributeValues: []
+    tagRules: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0_0"
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1"
@@ -118,6 +120,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 260, y: 220}
     attributeValues: []
+    tagRules: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_1_0"
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0"
@@ -153,6 +156,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 520, y: -220}
     attributeValues: []
+    tagRules: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0_0_0"
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0"
@@ -199,6 +203,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 780, y: 0}
     attributeValues: []
+    tagRules: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0_0_0_0"
     - "\u5F00\u59CB\u8282\u70B9_0_0_0_1"
@@ -241,6 +246,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 1040, y: -220}
     attributeValues: []
+    tagRules: []
     childNodeIds: []
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0_1"
     nodeTypeRef: "\u7ED3\u5C40"
@@ -281,6 +287,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 1040, y: -0}
     attributeValues: []
+    tagRules: []
     childNodeIds: []
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0"
     nodeTypeRef: "\u666E\u901A"
@@ -321,6 +328,7 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 520, y: 220}
     attributeValues: []
+    tagRules: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_1_0_0"
     - "\u5F00\u59CB\u8282\u70B9_1_0_1"
@@ -364,6 +372,15 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 1040, y: 220}
     attributeValues: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds: []
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0_1"
     nodeTypeRef: "\u7ED3\u5C40"
@@ -404,6 +421,15 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 1040, y: 460}
     attributeValues: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds: []
   nodeTypes:
   - typeName: "\u666E\u901A"
@@ -435,5 +461,14 @@ MonoBehaviour:
     description: "\u8282\u70B9\u5DF2\u89E3\u9501\uFF08\u5BF9\u5E94 StorySaveDataManager.IsNodeUnlocked\uFF09"
   - conditionType: NodeFinished
     description: "\u8282\u70B9\u5DF2\u5B8C\u6210\uFF08\u5BF9\u5E94 StorySaveDataManager.IsNodeFinished\uFF09"
+  tags:
+  - tagName: Unlock
+    description: "\u8282\u70B9\u662F\u5426\u89E3\u9501"
+    color: {r: 0.41037738, g: 1, b: 0.42136052, a: 1}
+    autoRefresh: 0
+  - tagName: Finished
+    description: "\u8282\u70B9\u662F\u5426\u5B8C\u6210"
+    color: {r: 0.1745283, g: 0.6984523, b: 1, a: 1}
+    autoRefresh: 0
   layoutDirection: 0
   zoom: 1

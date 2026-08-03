@@ -40,7 +40,7 @@ namespace Ale.NodeTree.Runtime
             if (!Application.isPlaying) return FindNodeLinear(nodeId);
 #endif
             if (_nodeLookup == null) BuildNodeLookup();
-            return _nodeLookup.TryGetValue(nodeId, out var node) ? node : null;
+            return _nodeLookup != null && _nodeLookup.TryGetValue(nodeId, out var node) ? node : null;
         }
 
         /// <summary>通过 typeName 查找节点类型定义，未找到返回 null。</summary>
@@ -51,7 +51,7 @@ namespace Ale.NodeTree.Runtime
             if (!Application.isPlaying) return FindTypeLinear(typeName);
 #endif
             if (_typeLookup == null) BuildTypeLookup();
-            return _typeLookup.TryGetValue(typeName, out var type) ? type : null;
+            return _typeLookup != null && _typeLookup.TryGetValue(typeName, out var type) ? type : null;
         }
 
         /// <summary>

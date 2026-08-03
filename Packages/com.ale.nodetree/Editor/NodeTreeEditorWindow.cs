@@ -6,13 +6,14 @@ using UnityEngine;
 using Ale.NodeTree.Runtime;
 using Ale.Toolkit.Runtime;
 using Ale.Toolkit.Editor;
+using Ale.Condition;
 
 namespace Ale.NodeTree.Editor
 {
     /// <summary>
     /// 节点树可视化编辑器主窗口（IMGUI + GL）。
     /// 通过菜单 Tools/NodeTree/Node Tree Editor 或 NodeTreeData Inspector 按钮打开。
-    /// 三列布局：左侧节点/条件类型管理 | 中央画布（节点拖拽/缩放/平移/连线） | 右侧节点属性面板。
+    /// 三列布局：左侧节点类型/标签管理 | 中央画布（节点拖拽/缩放/平移/连线） | 右侧节点属性面板。
     /// 所有修改通过 Undo.RecordObject + EditorUtility.SetDirty 支持撤销并触发资产保存。
     /// </summary>
     public class NodeTreeEditorWindow : EditorWindow
@@ -38,10 +39,10 @@ namespace Ale.NodeTree.Editor
         private const string PrefKeyZoom       = "NodeTreeSystem.Zoom";      // 画布缩放比例
         // ── 列表编辑器 ──
         private ReorderableList _nodeTypeList;      // 左侧节点类型可重排列表
-        private ReorderableList _conditionTypeList; // 左侧条件类型可重排列表
+        private ReorderableList _tagList;           // 左侧状态标签可重排列表
         private Vector2 _leftScroll;                // 左侧面板滚动位置
         private Vector2 _rightScroll;               // 右侧面板滚动位置
-        private int _leftTab;                       // 左侧标签页索引（0=节点类型, 1=条件类型）
+        private int _leftTab;                       // 左侧标签页索引（0=节点类型, 1=标签）
         // ── Layout/Repaint 快照（防止 IMGUI 控件数量不一致） ──
         private string _snapSelectedId;      // Layout 事件时快照的选中节点 ID
         private bool   _snapIsDragging;      // Layout 事件时快照的拖拽状态
@@ -57,9 +58,19 @@ namespace Ale.NodeTree.Editor
             ELayoutDirection.Top2Bottom,
             ELayoutDirection.Bottom2Top
         };
+        // 标签「自动」勾选的悬停提示（缓存 GUIContent，避免每帧重建）。
+        private static readonly GUIContent TagAutoRefreshLabel = new GUIContent(
+            "自动",
+            "自动刷新：开启后，打开 UI / 调用 RefreshAllNodeStates 时会按各节点该标签的条件重算并挂上" +
+            "（达成即挂、单调不摘，支持链式解锁）；关闭则该标签仅由业务代码主动设置（如 Finished 在阅读完成后 TrySetFinished）。");
+        // 「标签」页签顶部「自动写入 Unlock 条件」开关的提示（缓存 GUIContent）。
+        private static readonly GUIContent AutoWriteUnlockLabel = new GUIContent(
+            "自动写入 Unlock 条件",
+            "开启后：在画布上「添加子节点」或「添加连线」时，自动向子节点的 Unlock 规则写入" +
+            "「前置节点已完成（NodeTree.NodeFinished）」条件；关闭后则不自动写入，需手动配置。" +
+            "（项目级设置，记录于 ProjectSettings/NodeTreeEditorSettings.asset，随版本库共享）");
         private GUIStyle _snapStyle;
         private GUIStyle _warnLabelStyle;
-        private GUIStyle _redButtonStyle;
         private GUIStyle _duplicateLabelStyle;
         private GUIStyle _connectionHintStyle;
         
@@ -146,6 +157,7 @@ namespace Ale.NodeTree.Editor
         private void OnUndoRedoPerformed()
         {
             if (!_config) return;
+            _configSo = null; // 强制重建，避免撤销后 SerializedObject 缓存与数据不一致
             RebuildLists(); // 同时会将 _needDuplicateCheck 置 true
             Repaint();
         }
@@ -192,7 +204,6 @@ namespace Ale.NodeTree.Editor
         #region 标脏刷新
         // ── 节点类型/条件类型下拉缓存（避免每帧重建字符串数组） ──
         private string[] _nodeTypeNames      = Array.Empty<string>(); // 节点类型名称数组（用于 Popup）
-        private string[] _conditionTypeNames = Array.Empty<string>(); // 条件类型名称数组（第 0 项为"无条件"）
         
         /// <summary>
         /// 标记配置资产为已修改（触发 Unity 自动保存机制）。
@@ -213,6 +224,19 @@ namespace Ale.NodeTree.Editor
 
         // ── 节点类型「自定义属性字段」schema 列表绘制器（持久实例：按绑定的 attributes 引用变更自动重建）──
         private readonly AttributeDefinitionListDrawer _nodeTypeAttrListDrawer = new AttributeDefinitionListDrawer();
+
+        // ── SerializedObject 桥：Toolkit 的 ConditionExpression 内联绘制器（PropertyDrawer）需 SerializedProperty，
+        //    而本窗口以 POCO 直编。缓存一个包裹 _config 的 SerializedObject，绘制条件时 Update()→PropertyField→ApplyModifiedProperties()。──
+        private SerializedObject _configSo;
+        private SerializedObject ConfigSo
+        {
+            get
+            {
+                if (_configSo == null || _configSo.targetObject != _config)
+                    _configSo = _config ? new SerializedObject(_config) : null;
+                return _configSo;
+            }
+        }
 
         /// <summary>
         /// 供 <see cref="AttributeFieldDrawer"/> 绘制节点名/描述（<see cref="AttributeValue"/> Text）的最小
@@ -291,49 +315,54 @@ namespace Ale.NodeTree.Editor
             // 拖拽重排：Undo 由 DoLayoutList 前的 RecordObject 覆盖，此处仅标脏保存。
             _nodeTypeList.onReorderCallback = _ => MarkDirty();
 
-            // 条件类型列表
-            _conditionTypeList = new ReorderableList(_config.conditionTypes,
-                typeof(NodeConditionTypeData), true, true, true, true);
-            _conditionTypeList.drawHeaderCallback  = r => EditorGUI.LabelField(r, "条件类型");
-            _conditionTypeList.drawElementCallback = (r, idx, _, _) =>
+            // 状态标签列表（每项两行：标签名 + 颜色 + 自动刷新 / 描述）
+            _tagList = new ReorderableList(_config.tags,
+                typeof(NodeTagData), true, true, true, true);
+            _tagList.drawHeaderCallback    = r => EditorGUI.LabelField(r, "状态标签");
+            _tagList.elementHeightCallback = _ => EditorGUIUtility.singleLineHeight * 2f + 8f;
+            _tagList.drawElementCallback   = (r, idx, _, _) =>
             {
-                if (idx >= _config.conditionTypes.Count) return;
-                var c     = _config.conditionTypes[idx];
-                r.height  = EditorGUIUtility.singleLineHeight;
-                float third = r.width / 3f;
+                if (idx >= _config.tags.Count) return;
+                var tg   = _config.tags[idx];
+                float line = EditorGUIUtility.singleLineHeight;
+                float y0 = r.y + 3f;
+                float y1 = y0 + line + 2f;
+                const float autoW = 54f, colorW = 42f, gap = 4f;
+                float nameW = r.width - autoW - colorW - gap * 2f;
+
                 EditorGUI.BeginChangeCheck();
-                c.conditionType = EditorGUI.TextField(new Rect(r.x, r.y, third - 2f, r.height), c.conditionType);
-                c.description   = EditorGUI.TextField(new Rect(r.x + third, r.y, third * 2f - 2f, r.height), c.description);
+                // 第 1 行：标签名 + 颜色 + 自动刷新
+                tg.tagName     = EditorGUI.TextField(new Rect(r.x, y0, nameW, line), tg.tagName);
+                tg.color       = EditorGUI.ColorField(new Rect(r.x + nameW + gap, y0, colorW, line),
+                    GUIContent.none, tg.color, false, false, false);
+                tg.autoRefresh = EditorGUI.ToggleLeft(new Rect(r.x + nameW + colorW + gap * 2f, y0, autoW, line),
+                    TagAutoRefreshLabel, tg.autoRefresh);
+                // 第 2 行：描述
+                tg.description = EditorGUI.TextField(new Rect(r.x, y1, r.width, line), tg.description);
                 if (EditorGUI.EndChangeCheck())
-                {
-                    RebuildTypeNameCache(); // 条件类型名变化时刷新 Popup 缓存
                     MarkDirty();
-                }
             };
-            _conditionTypeList.onAddCallback = _ =>
+            _tagList.onAddCallback = _ =>
             {
-                Undo.RecordObject(_config, "添加条件类型");
-                _config.conditionTypes.Add(new NodeConditionTypeData { conditionType = "新条件" });
-                RebuildTypeNameCache();
+                Undo.RecordObject(_config, "添加标签");
+                _config.tags.Add(new NodeTagData { tagName = "新标签" });
                 MarkDirty();
             };
-            _conditionTypeList.onRemoveCallback = list =>
+            _tagList.onRemoveCallback = list =>
             {
-                Undo.RecordObject(_config, "删除条件类型");
-                _config.conditionTypes.RemoveAt(list.index);
-                RebuildTypeNameCache();
+                Undo.RecordObject(_config, "删除标签");
+                _config.tags.RemoveAt(list.index);
                 MarkDirty();
             };
             // 拖拽重排：Undo 由 DoLayoutList 前的 RecordObject 覆盖，此处仅标脏保存。
-            _conditionTypeList.onReorderCallback = _ => MarkDirty();
+            _tagList.onReorderCallback = _ => MarkDirty();
 
             RebuildTypeNameCache();
             _needDuplicateCheck = true; // 加载新配置后重新检查重名
         }
         
         /// <summary>
-        /// 重建 节点类型名称数组 和 条件类型名称数组（用于右侧属性面板的 Popup）。
-        /// 条件类型数组第 0 项固定为"（无条件）"。
+        /// 重建 节点类型名称数组（用于右侧属性面板节点类型 Popup）。
         /// </summary>
         private void RebuildTypeNameCache()
         {
@@ -342,12 +371,6 @@ namespace Ale.NodeTree.Editor
             _nodeTypeNames = new string[_config.nodeTypes.Count];
             for (int i = 0; i < _config.nodeTypes.Count; i++)
                 _nodeTypeNames[i] = _config.nodeTypes[i].typeName ?? $"类型{i}";
-
-            // 条件类型下拉：第一项为"无条件"
-            _conditionTypeNames = new string[_config.conditionTypes.Count + 1];
-            _conditionTypeNames[0] = "（无条件）";
-            for (int i = 0; i < _config.conditionTypes.Count; i++)
-                _conditionTypeNames[i + 1] = _config.conditionTypes[i].conditionType ?? $"条件{i}";
         }
         #endregion
         
@@ -545,14 +568,14 @@ namespace Ale.NodeTree.Editor
 
         #region 左侧面板
         /// <summary>
-        /// 绘制左侧面板：两个标签页（节点类型 / 条件类型），各自对应一个 ReorderableList。
+        /// 绘制左侧面板：两个标签页（节点类型 / 标签），各自对应一个 ReorderableList。
         /// </summary>
         private void DrawLeftPanel()
         {
             using (new EditorGUILayout.VerticalScope(GUILayout.Width(LeftPanelWidth)))
             {
                 // Tab 切换
-                _leftTab = GUILayout.Toolbar(_leftTab, new[] { "节点类型", "条件类型" });
+                _leftTab = GUILayout.Toolbar(_leftTab, new[] { "节点类型", "标签" });
 
                 using (var scroll = new EditorGUILayout.ScrollViewScope(
                     _leftScroll,
@@ -573,10 +596,23 @@ namespace Ale.NodeTree.Editor
                     }
                     else
                     {
-                        if (_conditionTypeList != null)
+                        // 顶部：标签设置区（标题 + 自动写入 Unlock 条件开关，项目级设置，随 ProjectSettings 版本同步）
+                        EditorGUILayout.LabelField("标签设置", EditorStyles.boldLabel);
+                        var settings = NodeTreeEditorSettings.Instance;
+                        EditorGUI.BeginChangeCheck();
+                        bool autoWrite = EditorGUILayout.ToggleLeft(
+                            AutoWriteUnlockLabel, settings.autoWriteUnlockCondition);
+                        if (EditorGUI.EndChangeCheck())
                         {
-                            if (_config) Undo.RecordObject(_config, "编辑条件类型列表");
-                            _conditionTypeList.DoLayoutList();
+                            settings.autoWriteUnlockCondition = autoWrite;
+                            settings.Save();
+                        }
+                        EditorGUILayout.Space(4f);
+
+                        if (_tagList != null)
+                        {
+                            if (_config) Undo.RecordObject(_config, "编辑标签列表");
+                            _tagList.DoLayoutList();
                         }
                     }
                 }
@@ -630,9 +666,6 @@ namespace Ale.NodeTree.Editor
         }
 
         #region 节点 编辑面板
-        // ── 条件系统下拉标签（静态，避免每帧重建） ──
-        private static readonly string[] SatisfyTypeLabels    = { "满足所有", "满足任意" };
-        private static readonly string[] ComparisonLabels     = { "等于", "不等于", "大于", "小于" };
         // ── 右侧面板节点 ID 重名警告 ──
         private string _idDuplicateWarning; // 当前检测到的重复 ID 输入值（非空时显示警告）
         private string _snapIdDuplicateWarning; // Layout 快照，保证 Repaint 控件数量与 Layout 完全一致
@@ -723,88 +756,8 @@ namespace Ale.NodeTree.Editor
             EditorGUILayout.LabelField("备注 (仅编辑器使用)");
             node.comment = EditorGUILayout.TextArea(node.comment, GUILayout.MinHeight(60f));
             
-            // ── 节点条件（conditionSatisfyType + conditionGroups） ──
-            if (node.conditionGroups == null) node.conditionGroups = new List<ConditionGroupData>();
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField("节点条件", EditorStyles.boldLabel, GUILayout.ExpandWidth(false));
-                GUILayout.FlexibleSpace();
-                EditorGUILayout.LabelField("条件组 要求:", GUILayout.Width(52f));
-                node.conditionSatisfyType = (EConditionSatisfyType)EditorGUILayout.Popup(
-                    (int)node.conditionSatisfyType, SatisfyTypeLabels, GUILayout.Width(72f));
-            }
-
-            // ── 条件组列表 ──
-            var redButtonStyle = _redButtonStyle ??= new GUIStyle(GUI.skin.button)
-            {
-                normal = { textColor = new Color(1f, 0.3f, 0.3f) },
-                hover  = { textColor = new Color(1f, 0.6f, 0.6f) },
-                active = { textColor = Color.red }
-            };
-            int removeGroupIdx = -1;
-            for (int gi = 0; gi < node.conditionGroups.Count; gi++)
-            {
-                var group = node.conditionGroups[gi];
-                if (group == null) { node.conditionGroups[gi] = group = new ConditionGroupData(); }
-                if (group.conditions == null) group.conditions = new List<ConditionData>();
-
-                using (new EditorGUILayout.VerticalScope(GUI.skin.box))
-                {
-                    // 条件组标题行：序号 + 组内满足类型 + 删除按钮
-                    using (new EditorGUILayout.HorizontalScope())
-                    {
-                        EditorGUILayout.LabelField($"条件组 {gi + 1}",
-                            EditorStyles.miniBoldLabel, GUILayout.ExpandWidth(false));
-                        GUILayout.FlexibleSpace();
-                        EditorGUILayout.LabelField("条件 要求:", GUILayout.Width(44f));
-                        group.satisfyType = (EConditionSatisfyType)EditorGUILayout.Popup(
-                            (int)group.satisfyType, SatisfyTypeLabels, GUILayout.Width(72f));
-                        if (GUILayout.Button("×", redButtonStyle, GUILayout.Width(22f)))
-                            removeGroupIdx = gi;
-                    }
-
-                    EditorGUILayout.Space(2f);
-
-                    // 条件列表（每条占一行：类型 + 比较 + 参数 + 删除）
-                    int removeCondIdx = -1;
-                    for (int ci = 0; ci < group.conditions.Count; ci++)
-                    {
-                        var cond = group.conditions[ci];
-                        if (cond == null) { group.conditions[ci] = cond = new ConditionData(); }
-
-                        using (new EditorGUILayout.HorizontalScope())
-                        {
-                            int condTypeIdx    = Array.IndexOf(_conditionTypeNames, cond.conditionType);
-                            int newCondTypeIdx = EditorGUILayout.Popup(
-                                condTypeIdx < 0 ? 0 : condTypeIdx, _conditionTypeNames);
-                            cond.conditionType = newCondTypeIdx > 0 && newCondTypeIdx < _conditionTypeNames.Length
-                                ? _conditionTypeNames[newCondTypeIdx] : "";
-
-                            cond.comparison = (EConditionComparison)EditorGUILayout.Popup(
-                                (int)cond.comparison, ComparisonLabels, GUILayout.Width(54f));
-
-                            cond.conditionParam = EditorGUILayout.TextField(cond.conditionParam);
-
-                            if (GUILayout.Button("×", redButtonStyle, GUILayout.Width(22f)))
-                                removeCondIdx = ci;
-                        }
-                    }
-
-                    if (removeCondIdx >= 0)
-                        group.conditions.RemoveAt(removeCondIdx);
-
-                    if (GUILayout.Button("＋ 添加条件", GUILayout.Height(20f)))
-                        group.conditions.Add(new ConditionData());
-                }
-
-                EditorGUILayout.Space(2f);
-            }
-
-            if (removeGroupIdx >= 0)
-                node.conditionGroups.RemoveAt(removeGroupIdx);
-
-            if (GUILayout.Button("＋ 添加条件组"))
-                node.conditionGroups.Add(new ConditionGroupData());
+            // ── 状态标签条件（逐标签：挂载该标签的门槛，用 Toolkit 条件编辑器内联绘制）──
+            DrawNodeTagRules(node);
 
             EditorGUILayout.Space(8f);
 
@@ -875,6 +828,61 @@ namespace Ale.NodeTree.Editor
 
             if (EditorGUI.EndChangeCheck())
                 MarkDirty();
+        }
+
+        /// <summary>
+        /// 绘制节点的「状态标签条件」：先按标签词表同步 tagRules，再对每个标签用 Toolkit 的
+        /// ConditionExpression 内联绘制器（PropertyDrawer）编辑其挂载条件。
+        /// 经 SerializedObject 桥读写（Update → PropertyField → ApplyModifiedProperties），Undo/脏标记自动处理。
+        /// </summary>
+        private void DrawNodeTagRules(NodeData node)
+        {
+            EditorGUILayout.LabelField("状态标签条件", EditorStyles.boldLabel);
+
+            // 按标签词表同步该节点的标签规则（补新增 / 删移除），结构变化时落盘
+            int before = node.tagRules.Count;
+            node.RebuildTagRules(_config);
+            if (node.tagRules.Count != before) MarkDirty();
+
+            if (node.tagRules.Count == 0)
+            {
+                EditorGUILayout.LabelField("（未定义任何标签。可在左侧「标签」面板添加。）",
+                    EditorStyles.centeredGreyMiniLabel);
+                return;
+            }
+
+            var so = ConfigSo;
+            if (so == null) return;
+            so.Update();
+
+            int nodeIdx   = _config.nodes.IndexOf(node);
+            var nodesProp = so.FindProperty("nodes");
+            if (nodeIdx < 0 || nodesProp == null || nodeIdx >= nodesProp.arraySize)
+                return;
+            var tagRulesProp = nodesProp.GetArrayElementAtIndex(nodeIdx).FindPropertyRelative("tagRules");
+            if (tagRulesProp == null) return;
+
+            for (int j = 0; j < node.tagRules.Count && j < tagRulesProp.arraySize; j++)
+            {
+                var rule = node.tagRules[j];
+                var meta = FindTag(rule.tagName);
+                string autoHint = meta != null && meta.autoRefresh ? " (自动)" : "";
+                var condProp = tagRulesProp.GetArrayElementAtIndex(j).FindPropertyRelative("condition");
+                if (condProp == null) continue;
+                EditorGUILayout.PropertyField(condProp, new GUIContent($"标签「{rule.tagName}」{autoHint}"), true);
+                EditorGUILayout.Space(2f);
+            }
+
+            so.ApplyModifiedProperties();
+        }
+
+        /// <summary>按标签名在词表中查找标签定义，未找到返回 null。</summary>
+        private NodeTagData FindTag(string tagName)
+        {
+            if (_config == null || string.IsNullOrEmpty(tagName)) return null;
+            foreach (var t in _config.tags)
+                if (t != null && t.tagName == tagName) return t;
+            return null;
         }
         #endregion
 
@@ -1439,21 +1447,8 @@ namespace Ale.NodeTree.Editor
                 position    = newPos
             };
 
-            // 默认条件组：要求父节点已完成（节点树的基本推进逻辑）
-            // conditionType = "NodeFinished"（内置检查器），conditionParam = 父节点 ID
-            newNode.conditionGroups.Add(new ConditionGroupData
-            {
-                satisfyType = EConditionSatisfyType.All,
-                conditions  = new List<ConditionData>
-                {
-                    new ConditionData
-                    {
-                        conditionType  = "NodeFinished",
-                        comparison     = EConditionComparison.Equal,
-                        conditionParam = parentId
-                    }
-                }
-            });
+            // 默认解锁条件：要求父节点已完成（节点树的基本推进逻辑）——写入子节点 Unlock 规则
+            AddUnlockFinishedItem(newNode, parentId);
 
             _config.nodes.Add(newNode);
             parent.childNodeIds.Add(newNode.nodeId);
@@ -1898,8 +1893,7 @@ namespace Ale.NodeTree.Editor
         /// <summary>
         /// 添加从 fromId 到 toId 的连线：
         /// 1. 将 toId 加入 fromNode.childNodeIds（已存在则跳过）。
-        /// 2. 将 toNode.conditionSatisfyType 设为 Any（任意条件组满足即解锁）。
-        /// 3. 在 toNode.conditionGroups 中新增条件组：NodeFinished == fromId。
+        /// 2. 在 toNode 的 Unlock 规则条件中追加一项 NodeTree.NodeFinished(target=fromId)（组间 OR，任一前置完成即解锁）。
         /// </summary>
         private void AddConnection(string fromId, string toId)
         {
@@ -1912,22 +1906,8 @@ namespace Ale.NodeTree.Editor
             Undo.RecordObject(_config, "添加连线");
             fromNode.childNodeIds.Add(toId);
 
-            // 终点节点：条件满足类型改为 Any（任一前置条件满足即可解锁）
-            toNode.conditionSatisfyType = EConditionSatisfyType.Any;
-            // 新增条件组：要求起点节点已完成
-            toNode.conditionGroups.Add(new ConditionGroupData
-            {
-                satisfyType = EConditionSatisfyType.All,
-                conditions  = new List<ConditionData>
-                {
-                    new ConditionData
-                    {
-                        conditionType  = "NodeFinished",
-                        comparison     = EConditionComparison.Equal,
-                        conditionParam = fromId
-                    }
-                }
-            });
+            // 追加解锁条件：要求起点节点已完成（多前置为“任一完成即解锁”，组间 OR）
+            AddUnlockFinishedItem(toNode, fromId);
             MarkDirty();
         }
         #endregion
@@ -1936,7 +1916,7 @@ namespace Ale.NodeTree.Editor
         /// <summary>
         /// 删除从 fromId 到 toId 的连线：
         /// 1. 从 fromNode.childNodeIds 中移除 toId。
-        /// 2. 从 toNode.conditionGroups 中删除含有 NodeFinished==fromId 条件的条件组。
+        /// 2. 从 toNode 的 Unlock 规则条件中删除指向 fromId 的 NodeTree.NodeFinished 项（连同因此变空的组）。
         /// </summary>
         private void RemoveConnection(string fromId, string toId)
         {
@@ -1948,17 +1928,82 @@ namespace Ale.NodeTree.Editor
             Undo.RecordObject(_config, "删除连线");
             fromNode.childNodeIds.Remove(toId);
 
-            // 删除 toNode 中与该连线关联的条件组（含 NodeFinished==fromId 的组）
-            toNode?.conditionGroups.RemoveAll(g =>
-                g?.conditions != null &&
-                g.conditions.Exists(c =>
-                    c != null &&
-                    c.conditionType  == "NodeFinished" &&
-                    c.conditionParam == fromId));
+            // 删除 toNode Unlock 规则中指向 fromId 的 NodeTree.NodeFinished 条件项
+            RemoveUnlockFinishedItem(toNode, fromId);
 
             MarkDirty();
         }
         #endregion
+        #endregion
+
+        #region 条件接线辅助
+        // NodeTree.NodeFinished 判定器键（与 NodeFinishedEvaluator.Key 对应）。
+        private const string NodeFinishedKey = "NodeTree.NodeFinished";
+
+        /// <summary>
+        /// 向节点的 Unlock 规则条件追加一项「前置节点已完成」：NodeTree.NodeFinished(target=fromId)。
+        /// 多前置各占一组、组间 OR（任一前置完成即解锁）；已存在同 target 项则跳过。Unlock 标签不存在则不接线。
+        /// 受「标签」页签的「自动写入 Unlock 条件」开关控制（关闭时为空操作）。
+        /// </summary>
+        private void AddUnlockFinishedItem(NodeData node, string fromId)
+        {
+            if (node == null || string.IsNullOrEmpty(fromId)) return;
+            if (!NodeTreeEditorSettings.Instance.autoWriteUnlockCondition) return; // 开关关闭：不自动写入 Unlock 条件
+            node.RebuildTagRules(_config);
+            var rule = node.GetTagRule(NodeTreeTags.Unlock);
+            if (rule == null) return;
+            if (rule.condition == null) rule.condition = new ConditionExpression();
+            if (ConditionHasFinishedTarget(rule.condition, fromId)) return;
+
+            rule.condition.groupOperator = ConditionLogicOp.Or; // 多前置：任一完成即解锁
+            var group = new ConditionGroup { itemOperator = ConditionLogicOp.And };
+            group.items.Add(MakeNodeFinishedItem(fromId));
+            rule.condition.groups.Add(group);
+        }
+
+        /// <summary>从节点的 Unlock 规则条件中删除指向 fromId 的 NodeTree.NodeFinished 项（连同因此变空的组）。</summary>
+        private void RemoveUnlockFinishedItem(NodeData node, string fromId)
+        {
+            var rule = node?.GetTagRule(NodeTreeTags.Unlock);
+            var groups = rule?.condition?.groups;
+            if (groups == null) return;
+
+            foreach (var g in groups)
+                g?.items?.RemoveAll(it => it != null && it.key == NodeFinishedKey && ItemTargetEquals(it, fromId));
+            // 移除因此变空的组（仅保留仍有条件项的组）
+            groups.RemoveAll(g => g == null || g.items == null || g.items.Count == 0);
+        }
+
+        // 构造一项 NodeTree.NodeFinished(target=targetId)。
+        private static ConditionItem MakeNodeFinishedItem(string targetId)
+        {
+            var item = new ConditionItem(NodeFinishedKey);
+            var p = new ConditionParam("target", ConditionParamType.String);
+            p.SetString(targetId);
+            item.parameters.Add(p);
+            return item;
+        }
+
+        // 判断某条件项的 target 参数是否等于 targetId。
+        private static bool ItemTargetEquals(ConditionItem item, string targetId)
+        {
+            if (item?.parameters == null) return false;
+            foreach (var p in item.parameters)
+                if (p != null && p.id == "target") return p.GetString() == targetId;
+            return false;
+        }
+
+        // 判断条件表达式中是否已存在指向 targetId 的 NodeTree.NodeFinished 项。
+        private static bool ConditionHasFinishedTarget(ConditionExpression expr, string targetId)
+        {
+            if (expr?.groups == null) return false;
+            foreach (var g in expr.groups)
+                if (g?.items != null)
+                    foreach (var it in g.items)
+                        if (it != null && it.key == NodeFinishedKey && ItemTargetEquals(it, targetId))
+                            return true;
+            return false;
+        }
         #endregion
         
         #region 自动布局
