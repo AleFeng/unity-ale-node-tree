@@ -16,8 +16,6 @@ MonoBehaviour:
   - nodeId: "\u5F00\u59CB\u8282\u70B9"
     nodeTypeRef: "\u666E\u901A"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups: []
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -48,13 +46,6 @@ MonoBehaviour:
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0"
     nodeTypeRef: "\u666E\u901A"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -84,13 +75,6 @@ MonoBehaviour:
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1"
     nodeTypeRef: "\u666E\u901A"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -126,13 +110,6 @@ MonoBehaviour:
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0"
     nodeTypeRef: "\u666E\u901A"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_0"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -140,7 +117,10 @@ MonoBehaviour:
       enumTypeRef: 
       ints: 
       floats: []
-      strings: []
+      strings:
+      - 
+      - 
+      - 
       objRefs: []
       curves: []
       objAddresses: []
@@ -150,30 +130,29 @@ MonoBehaviour:
       enumTypeRef: 
       ints: 
       floats: []
-      strings: []
+      strings:
+      - 
+      - 
+      - 
       objRefs: []
       curves: []
       objAddresses: []
     position: {x: 520, y: -220}
     attributeValues: []
-    tagRules: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0_0_0"
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0"
     nodeTypeRef: "\u666E\u901A"
     comment: 
-    conditionSatisfyType: 1
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0"
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -203,20 +182,21 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 780, y: 0}
     attributeValues: []
-    tagRules: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0_0_0_0"
     - "\u5F00\u59CB\u8282\u70B9_0_0_0_1"
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0_0"
     nodeTypeRef: "\u7ED3\u5C40"
     comment: 
-    conditionSatisfyType: 1
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0_0"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -251,13 +231,6 @@ MonoBehaviour:
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0_0_1"
     nodeTypeRef: "\u7ED3\u5C40"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_0_0_0"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -287,18 +260,19 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 1040, y: -0}
     attributeValues: []
-    tagRules: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds: []
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0"
     nodeTypeRef: "\u666E\u901A"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_1"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -328,7 +302,15 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 520, y: 220}
     attributeValues: []
-    tagRules: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_1_0_0"
     - "\u5F00\u59CB\u8282\u70B9_1_0_1"
@@ -336,13 +318,6 @@ MonoBehaviour:
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0_0"
     nodeTypeRef: "\u7ED3\u5C40"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -385,13 +360,6 @@ MonoBehaviour:
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1_0_1"
     nodeTypeRef: "\u7ED3\u5C40"
     comment: 
-    conditionSatisfyType: 0
-    conditionGroups:
-    - satisfyType: 0
-      conditions:
-      - conditionType: NodeFinished
-        comparison: 0
-        conditionParam: "\u5F00\u59CB\u8282\u70B9_1_0"
     uiIcon: {fileID: 0}
     nodeName:
       type: 10
@@ -456,11 +424,6 @@ MonoBehaviour:
       lineWidth: 10
       material: {fileID: 2100000, guid: 2af307e97fc88ba4fba18e05d1dde40c, type: 2}
     attributes: []
-  conditionTypes:
-  - conditionType: NodeUnlocked
-    description: "\u8282\u70B9\u5DF2\u89E3\u9501\uFF08\u5BF9\u5E94 StorySaveDataManager.IsNodeUnlocked\uFF09"
-  - conditionType: NodeFinished
-    description: "\u8282\u70B9\u5DF2\u5B8C\u6210\uFF08\u5BF9\u5E94 StorySaveDataManager.IsNodeFinished\uFF09"
   tags:
   - tagName: Unlock
     description: "\u8282\u70B9\u662F\u5426\u89E3\u9501"

@@ -607,9 +607,6 @@ namespace Ale.NodeTree.Editor
 
             foreach (var node in config.nodes)
             {
-                var nodeType = config.GetNodeType(node.nodeTypeRef);
-                if (nodeType == null) continue;
-
                 var fromScreen = canvas.CanvasToScreen(node.position);
 
                 foreach (var childId in node.childNodeIds)
@@ -617,20 +614,24 @@ namespace Ale.NodeTree.Editor
                     var child = config.GetNode(childId);
                     if (child == null) continue;
 
+                    // 连线样式归子节点类型（入边样式）：线型/线宽/颜色取子节点类型
+                    var childType = config.GetNodeType(child.nodeTypeRef);
+                    if (childType == null) continue;
+
                     var toScreen = canvas.CanvasToScreen(child.position);
                     // 不改端点：仅用包围盒做「完全在外」粗剔除，超出画布部分交由 GL 视口硬件裁剪，
                     // 曲线/折线以真实端点绘制，形状与位置不失真。
-                    if (!LineBounds(fromScreen, toScreen, nodeType.line).Overlaps(localBounds)) continue;
+                    if (!LineBounds(fromScreen, toScreen, childType.line).Overlaps(localBounds)) continue;
 
                     bool isSelConn = node.nodeId == snapSelFrom && childId == snapSelTo;
                     bool isHovConn = node.nodeId == snapHovFrom && childId == snapHovTo;
                     Color lineColor = isSelConn
                         ? new Color(1f, 0.85f, 0.1f, 1f)
                         : isHovConn
-                            ? nodeType.color
-                            : nodeType.color * 0.8f;
+                            ? childType.color
+                            : childType.color * 0.8f;
                     DrawLineConnection(fromScreen, toScreen,
-                        nodeType.line, config.layoutDirection, lineColor, canvas.Zoom);
+                        childType.line, config.layoutDirection, lineColor, canvas.Zoom);
                 }
             }
         }
@@ -650,29 +651,30 @@ namespace Ale.NodeTree.Editor
 
             foreach (var node in config.nodes)
             {
-                var nodeType = config.GetNodeType(node.nodeTypeRef);
-                if (nodeType?.line == null) continue;
-
                 var fromScreen = canvas.CanvasToScreen(node.position);
-                var lineColor  = new Color(nodeType.color.r * 0.8f,
-                                           nodeType.color.g * 0.8f,
-                                           nodeType.color.b * 0.8f, 1f);
-                float arrowSize = Mathf.Max(nodeType.line.lineWidth * 2.5f * canvas.Zoom, 8f);
 
                 foreach (var childId in node.childNodeIds)
                 {
                     var child = config.GetNode(childId);
                     if (child == null) continue;
 
+                    // 箭头随连线样式，归子节点类型（入边样式）：颜色/线宽/线型取子节点类型
+                    var childType = config.GetNodeType(child.nodeTypeRef);
+                    if (childType?.line == null) continue;
+
                     var toScreen = canvas.CanvasToScreen(child.position);
                     if ((toScreen - fromScreen).sqrMagnitude < 1f) continue;
 
-                    var childType   = config.GetNodeType(child.nodeTypeRef);
-                    Vector2 childSz = childType?.resolution ?? new Vector2(80f, 80f);
+                    var lineColor = new Color(childType.color.r * 0.8f,
+                                              childType.color.g * 0.8f,
+                                              childType.color.b * 0.8f, 1f);
+                    float arrowSize = Mathf.Max(childType.line.lineWidth * 2.5f * canvas.Zoom, 8f);
+
+                    Vector2 childSz   = childType.resolution;
                     float childRadius = Mathf.Min(childSz.x, childSz.y) * 0.5f * canvas.Zoom;
 
                     GetArrowTipAndDir(fromScreen, toScreen,
-                        nodeType.line, config.layoutDirection, childRadius,
+                        childType.line, config.layoutDirection, childRadius,
                         out var arrowTip, out var arrowDir);
 
                     var arrowBounds = new Rect(arrowTip.x - arrowSize, arrowTip.y - arrowSize,

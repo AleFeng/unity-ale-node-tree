@@ -569,10 +569,11 @@ namespace Ale.NodeTree.Runtime
                     var child = config.GetNode(childId);
                     if (child == null) continue;
 
-                    var parentType = config.GetNodeType(node.nodeTypeRef);
-                    if (parentType == null) continue;
+                    // 连线样式归子节点类型（入边样式）：按子节点类型分组、取其 line
+                    var childType = config.GetNodeType(child.nodeTypeRef);
+                    if (childType == null) continue;
 
-                    var typeName = node.nodeTypeRef;
+                    var typeName = child.nodeTypeRef;
                     if (!segmentsByType.TryGetValue(typeName, out var list))
                     {
                         list = new List<(Vector3, Vector3)>();
