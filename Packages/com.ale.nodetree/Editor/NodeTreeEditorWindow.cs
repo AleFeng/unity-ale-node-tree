@@ -1711,6 +1711,8 @@ namespace Ale.NodeTree.Editor
 
             Undo.RecordObject(_config, "删除节点");
 
+            // 提升的子节点（删除前快照）与主父节点
+            var promoted    = new List<string>(target.childNodeIds);
             string parentId = _config.GetParentId(nodeId);
             var parent      = parentId != null ? _config.GetNode(parentId) : null;
 
@@ -1721,11 +1723,25 @@ namespace Ale.NodeTree.Editor
                 {
                     parent.childNodeIds.RemoveAt(idx);
                     // 子节点提升到父节点，插入原位置
-                    parent.childNodeIds.InsertRange(idx, target.childNodeIds);
+                    parent.childNodeIds.InsertRange(idx, promoted);
                 }
             }
 
+            // 多父 DAG：移除所有节点 childNodeIds 中对已删节点的（可能悬空的）引用
+            foreach (var n in _config.nodes)
+                n?.childNodeIds?.RemoveAll(id => id == nodeId);
+
             _config.nodes.Remove(target);
+
+            // 清理剩余节点 Unlock 条件中指向已删节点的 NodeFinished 项：引用已失效，必须清除，
+            // 否则被提升的子节点会因永远无法满足「已删节点已完成」而永久锁死。
+            foreach (var n in _config.nodes)
+                RemoveUnlockFinishedItem(n, nodeId);
+
+            // 提升的子节点重接到祖父：保持解锁链（祖父完成→子解锁）；受「自动写入 Unlock 条件」开关控制
+            if (parentId != null)
+                foreach (var childId in promoted)
+                    AddUnlockFinishedItem(_config.GetNode(childId), parentId);
 
             if (_canvas.SelectedNodeId == nodeId)
                 _canvas.SelectedNodeId = null;
@@ -1757,13 +1773,18 @@ namespace Ale.NodeTree.Editor
 
             Undo.RecordObject(_config, "切除子树");
 
-            // 从父节点的 childNodeIds 中移除根节点
-            string parentId = _config.GetParentId(nodeId);
-            var parent      = parentId != null ? _config.GetNode(parentId) : null;
-            parent?.childNodeIds.Remove(nodeId);
+            // 多父 DAG：从所有（子树外的）父节点移除对被切除子树各节点的引用
+            foreach (var n in _config.nodes)
+                if (n != null && !toDelete.Contains(n.nodeId))
+                    n.childNodeIds?.RemoveAll(id => toDelete.Contains(id));
 
             // 删除所有收集到的节点
             _config.nodes.RemoveAll(n => toDelete.Contains(n.nodeId));
+
+            // 清理剩余节点 Unlock 条件中指向被切除节点的 NodeFinished 项（引用已失效）
+            foreach (var n in _config.nodes)
+                foreach (var deletedId in toDelete)
+                    RemoveUnlockFinishedItem(n, deletedId);
 
             if (toDelete.Contains(_canvas.SelectedNodeId))
                 _canvas.SelectedNodeId = null;
@@ -2075,7 +2096,8 @@ namespace Ale.NodeTree.Editor
         /// <summary>
         /// 删除从 fromId 到 toId 的连线：
         /// 1. 从 fromNode.childNodeIds 中移除 toId。
-        /// 2. 从 toNode 的 Unlock 规则条件中删除指向 fromId 的 NodeTree.NodeFinished 项（连同因此变空的组）。
+        /// 2. 若「自动写入 Unlock 条件」开启，则从 toNode 的 Unlock 规则条件中删除指向 fromId 的
+        ///    NodeTree.NodeFinished 项（连同因此变空的组）；关闭时保留，避免误删手工条件。
         /// </summary>
         private void RemoveConnection(string fromId, string toId)
         {
@@ -2087,8 +2109,10 @@ namespace Ale.NodeTree.Editor
             Undo.RecordObject(_config, "删除连线");
             fromNode.childNodeIds.Remove(toId);
 
-            // 删除 toNode Unlock 规则中指向 fromId 的 NodeTree.NodeFinished 条件项
-            RemoveUnlockFinishedItem(toNode, fromId);
+            // 删除 toNode Unlock 规则中指向 fromId 的 NodeFinished 项——仅在「自动写入 Unlock 条件」开启时执行，
+            // 与添加侧一致：fromId 节点仍存在，其条件可能是用户手动配置的，关闭开关时不应误删。
+            if (NodeTreeEditorSettings.Instance.autoWriteUnlockCondition)
+                RemoveUnlockFinishedItem(toNode, fromId);
 
             MarkDirty();
         }
