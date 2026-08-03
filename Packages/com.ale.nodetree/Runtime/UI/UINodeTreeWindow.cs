@@ -85,6 +85,13 @@ namespace Ale.NodeTree.Runtime
 
         private void OnDestroy()
         {
+            // 1) 归还所有激活节点克隆到各自对象池：清除 ToolkitPool.Links 静态引用，
+            //    并把散落在（可能位于本组件之外的）nodeTreeRoot 下的克隆收回，随后随池一并销毁。
+            foreach (var pool in _pools.Values)
+                if (pool) pool.DespawnAll();
+            _activeNodes.Clear();
+
+            // 2) 销毁连线材质实例与合并 Mesh（原生对象不被 GC，否则每次销毁泄漏一个/类型）。
             foreach (var mat in _lineMaterialInstances.Values)
                 if (mat) Destroy(mat);
             _lineMaterialInstances.Clear();
@@ -95,6 +102,19 @@ namespace Ale.NodeTree.Runtime
                 var mesh = cr.GetMesh();
                 if (mesh) Destroy(mesh);
             }
+            _lineCanvasRenderers.Clear();
+
+            // 3) 销毁本窗口在 nodeTreeRoot 下创建的容器与对象池 GameObject。
+            //    nodeTreeRoot 若挂在本组件之外（如 ScrollView-Content 用法），这些子物体不会随本组件销毁，
+            //    需显式清理，避免残留空层级与孤儿克隆。
+            if (_nodeContainer) Destroy(_nodeContainer.gameObject);
+            if (_lineContainer) Destroy(_lineContainer.gameObject);
+            _nodeContainer = null;
+            _lineContainer = null;
+
+            foreach (var pool in _pools.Values)
+                if (pool) Destroy(pool.gameObject);
+            _pools.Clear();
         }
 
         #region 公开接口
