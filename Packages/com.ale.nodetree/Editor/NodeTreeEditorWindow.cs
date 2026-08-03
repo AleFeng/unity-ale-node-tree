@@ -960,6 +960,17 @@ namespace Ale.NodeTree.Editor
             // Y 轴向上坐标系：CanvasToScreen / ScreenToCanvas 需要知道当前画布高度
             _canvas.CanvasHeight = localRect.height;
 
+            // 为画布内所有 GL 绘制建立硬件裁剪视口：GUI.BeginClip 只裁剪 IMGUI，原始 GL 会溢出到侧面板，
+            // 故用 GL.Viewport 将绘制收窄到画布区（物理像素、底左原点；LoadPixelMatrix 边界用逻辑尺寸）。
+            float ppp = EditorGUIUtility.pixelsPerPoint;
+            var glClip = new Rect(
+                canvasRect.x * ppp,
+                (position.height - canvasRect.yMax) * ppp,
+                canvasRect.width  * ppp,
+                canvasRect.height * ppp);
+            var glFull = new Rect(0f, 0f, position.width * ppp, position.height * ppp);
+            NodeDrawer.SetGLClip(glClip, glFull, canvasRect.width, canvasRect.height);
+
             // 背景
             if (Event.current.type == EventType.Repaint)
             {
@@ -989,6 +1000,7 @@ namespace Ale.NodeTree.Editor
             DrawDuplicateWarning(localRect);
 
             GUI.EndClip();
+            NodeDrawer.ClearGLClip(); // 画布 GL 裁剪仅作用于本区，结束即复原，避免影响后续面板/工具栏绘制
 
             // 处理输入（在 clip 外，坐标需要使用 canvasRect 偏移）
             HandleCanvasInput(canvasRect);
@@ -1053,10 +1065,10 @@ namespace Ale.NodeTree.Editor
         /// 遍历所有节点，通过 NodeDrawer.DrawNode 绘制节点，
         /// 并处理左键点击（选中/开始拖拽）和右键点击（弹出上下文菜单）。
         /// 节点矩形基于 _canvas.GetNodeScreenRect 计算（含缩放）。
-        /// GL 绘制会绕过 IMGUI BeginClip 裁剪，因此在 CPU 侧做视口剔除：
-        /// 节点矩形（含下方标签区）完全落在 localBounds 外时跳过绘制与交互。
-        /// localBounds 由调用方（DrawCanvas）传入当前帧真实的画布局部矩形，
-        /// 不能使用 _canvasRect 字段（Layout 阶段返回占位尺寸，远小于实际画布）。
+        /// 节点 GL 形状由画布 GL 视口（见 DrawViewport 的 SetGLClip）在边缘做硬件裁切；
+        /// 此处的 Overlaps 仅作「完全在外」粗剔除：节点矩形（含下方标签区）完全落在
+        /// localBounds 外时跳过绘制与交互。localBounds 由调用方（DrawViewport）传入
+        /// 当前帧真实的画布局部矩形。
         /// </summary>
         private void DrawNodes(Rect localBounds)
         {
@@ -1752,17 +1764,13 @@ namespace Ale.NodeTree.Editor
             var sourceNode = _config.GetNode(_snapConnectionSourceId);
             if (sourceNode == null) return;
 
-            var fromScreen  = _canvas.CanvasToScreen(sourceNode.position);
-            var toScreen    = Event.current.mousePosition; // BeginClip 内已是局部坐标
-
-            var clippedFrom = fromScreen;
-            var clippedTo   = toScreen;
-            
-            //if (!ClipLineToRect(localBounds, ref clippedFrom, ref clippedTo)) return;
+            var fromScreen = _canvas.CanvasToScreen(sourceNode.position);
+            var toScreen   = Event.current.mousePosition; // BeginClip 内已是局部坐标
 
             var nodeType  = _config.GetNodeType(sourceNode.nodeTypeRef);
             var lineStyle = nodeType?.line ?? new LineTypeData();
-            NodeDrawer.DrawLineConnection(clippedFrom, clippedTo, lineStyle,
+            // 端点保持真实，超出画布部分由 GL 视口硬件裁剪（见 DrawViewport 的 SetGLClip）
+            NodeDrawer.DrawLineConnection(fromScreen, toScreen, lineStyle,
                 _config.layoutDirection, new Color(1f, 1f, 0.2f, 0.75f), _canvas.Zoom);
         }
 

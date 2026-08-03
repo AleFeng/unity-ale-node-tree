@@ -170,11 +170,10 @@ namespace Ale.NodeTree.Editor
             float rx = rect.width  * 0.5f;
             float ry = rect.height * 0.5f;
 
-            GL.PushMatrix();
-            GL.LoadPixelMatrix();
+            BeginGLClip();
             DrawFilledEllipseGL(center, rx, ry, fill, segments);
             DrawEllipseBorderGL(center, rx, ry, border, bw, segments);
-            GL.PopMatrix();
+            EndGLClip();
         }
 
         /// <summary>
@@ -188,13 +187,12 @@ namespace Ale.NodeTree.Editor
             var midRect = new Rect(rect.x + radius, rect.y, rect.width - radius * 2f, rect.height);
             EditorGUI.DrawRect(midRect, fill);
 
-            GL.PushMatrix();
-            GL.LoadPixelMatrix();
+            BeginGLClip();
             DrawFilledEllipseGL(new Vector2(rect.x + radius, rect.center.y), radius, radius, fill, 20);
             DrawFilledEllipseGL(new Vector2(rect.xMax - radius, rect.center.y), radius, radius, fill, 20);
             DrawEllipseBorderGL(new Vector2(rect.x + radius, rect.center.y), radius, radius, border, bw, 20);
             DrawEllipseBorderGL(new Vector2(rect.xMax - radius, rect.center.y), radius, radius, border, bw, 20);
-            GL.PopMatrix();
+            EndGLClip();
 
             // 边框直线部分（上下两条）
             EditorGUI.DrawRect(new Rect(rect.x + radius, rect.y, rect.width - radius * 2f, bw), border);
@@ -210,11 +208,10 @@ namespace Ale.NodeTree.Editor
             var points = GetShapePoints(rect, shape);
             if (points == null || points.Length < 3) return;
 
-            GL.PushMatrix();
-            GL.LoadPixelMatrix();
+            BeginGLClip();
             DrawFilledPolygonGL(points, fill);
             DrawPolygonBorderGL(points, border, bw);
-            GL.PopMatrix();
+            EndGLClip();
         }
 
         // ── 多边形顶点定义 ──
@@ -320,6 +317,12 @@ namespace Ale.NodeTree.Editor
         private static readonly int Cull = Shader.PropertyToID("_Cull");
         private static readonly int ZWrite = Shader.PropertyToID("_ZWrite");
 
+        // ── 画布 GL 硬件裁剪（GUI.BeginClip 只裁 IMGUI，GL 会溢出到侧面板，故另设 GL 视口裁剪） ──
+        private static bool  _glClipActive;      // 是否启用画布裁剪视口
+        private static Rect  _glClipVp;          // 画布裁剪视口（物理像素，底左原点）
+        private static Rect  _glFullVp;          // 整窗视口（物理像素，用于绘制后复原）
+        private static float _glClipW, _glClipH; // 画布逻辑尺寸（点），供 LoadPixelMatrix 边界使用（勿乘 DPI）
+
         /// <summary>
         /// 获取（或延迟创建）GL 绘制材质。
         /// 使用 Hidden/Internal-Colored Shader，启用透明混合，关闭深度写入与背面剔除。
@@ -336,6 +339,52 @@ namespace Ale.NodeTree.Editor
                 _glMat.SetInt(ZWrite,   0);
             }
             return _glMat;
+        }
+
+        // ── 画布 GL 裁剪：设置 / 清除 / 分段包裹 ──
+
+        /// <summary>
+        /// 设置画布 GL 裁剪视口（由编辑器窗口每帧在绘制画布前调用）。
+        /// clipVp/fullVp 为物理像素、底左原点（GL 约定）；logicalW/H 为画布逻辑尺寸（点），
+        /// 供 <see cref="BeginGLClip"/> 里的 GL.LoadPixelMatrix 使用（勿乘 DPI）。
+        /// </summary>
+        public static void SetGLClip(Rect clipVp, Rect fullVp, float logicalW, float logicalH)
+        {
+            _glClipActive = true;
+            _glClipVp = clipVp;
+            _glFullVp = fullVp;
+            _glClipW  = logicalW;
+            _glClipH  = logicalH;
+        }
+
+        /// <summary>清除画布 GL 裁剪（画布绘制结束后调用），后续 GL 恢复为整窗绘制。</summary>
+        public static void ClearGLClip() => _glClipActive = false;
+
+        /// <summary>
+        /// 进入一段 GL 绘制：压栈并按裁剪状态设定视口与像素矩阵。
+        /// 启用裁剪时用 GL.Viewport 收窄到画布区、并以逻辑尺寸建立像素矩阵，
+        /// 使超出画布的几何被 GPU 裁掉；未启用时退化为原 GL.LoadPixelMatrix()。
+        /// 必须与 <see cref="EndGLClip"/> 配对（含 PushMatrix）。
+        /// </summary>
+        private static void BeginGLClip()
+        {
+            GL.PushMatrix();
+            if (_glClipActive)
+            {
+                GL.Viewport(_glClipVp);
+                GL.LoadPixelMatrix(0f, _glClipW, _glClipH, 0f);
+            }
+            else
+            {
+                GL.LoadPixelMatrix();
+            }
+        }
+
+        /// <summary>结束一段 GL 绘制：复原整窗视口并出栈。必须与 <see cref="BeginGLClip"/> 配对。</summary>
+        private static void EndGLClip()
+        {
+            if (_glClipActive) GL.Viewport(_glFullVp);
+            GL.PopMatrix();
         }
 
         /// <summary>
@@ -445,8 +494,7 @@ namespace Ale.NodeTree.Editor
             var base1 = tip - direction * size + perp * (size * 0.5f); // 左底角
             var base2 = tip - direction * size - perp * (size * 0.5f); // 右底角
 
-            GL.PushMatrix();
-            GL.LoadPixelMatrix();
+            BeginGLClip();
             GetGLMat().SetPass(0);
             GL.Begin(GL.TRIANGLES);
             GL.Color(color);
@@ -454,7 +502,7 @@ namespace Ale.NodeTree.Editor
             GL.Vertex3(base1.x, base1.y, 0f);
             GL.Vertex3(base2.x, base2.y, 0f);
             GL.End();
-            GL.PopMatrix();
+            EndGLClip();
         }
 
         // ── 箭头辅助计算 ──
@@ -543,8 +591,8 @@ namespace Ale.NodeTree.Editor
 
         /// <summary>
         /// 遍历所有节点，为每条父→子关系绘制连线。
-        /// GL 绘制会绕过 IMGUI BeginClip，因此在 CPU 侧用 Liang-Barsky 算法将每条线段
-        /// 裁剪到 localBounds 内，完全在外部的线段直接跳过，避免覆盖相邻面板。
+        /// GL 绘制经画布 GL 视口（见 <see cref="SetGLClip"/>）做硬件裁剪，故此处只用
+        /// 包围盒做「完全在外」粗剔除、不改动端点，曲线/折线以真实端点绘制、形状不失真。
         /// 仅在 EventType.Repaint 时执行。
         /// </summary>
         public static void DrawAllLineConnections(
@@ -569,10 +617,10 @@ namespace Ale.NodeTree.Editor
                     var child = config.GetNode(childId);
                     if (child == null) continue;
 
-                    var toScreen    = canvas.CanvasToScreen(child.position);
-                    var clippedFrom = fromScreen;
-                    var clippedTo   = toScreen;
-                    if (!ClipLineToRect(localBounds, ref clippedFrom, ref clippedTo)) continue;
+                    var toScreen = canvas.CanvasToScreen(child.position);
+                    // 不改端点：仅用包围盒做「完全在外」粗剔除，超出画布部分交由 GL 视口硬件裁剪，
+                    // 曲线/折线以真实端点绘制，形状与位置不失真。
+                    if (!LineBounds(fromScreen, toScreen, nodeType.line).Overlaps(localBounds)) continue;
 
                     bool isSelConn = node.nodeId == snapSelFrom && childId == snapSelTo;
                     bool isHovConn = node.nodeId == snapHovFrom && childId == snapHovTo;
@@ -581,7 +629,7 @@ namespace Ale.NodeTree.Editor
                         : isHovConn
                             ? nodeType.color
                             : nodeType.color * 0.8f;
-                    DrawLineConnection(clippedFrom, clippedTo,
+                    DrawLineConnection(fromScreen, toScreen,
                         nodeType.line, config.layoutDirection, lineColor, canvas.Zoom);
                 }
             }
@@ -637,8 +685,23 @@ namespace Ale.NodeTree.Editor
         }
 
         /// <summary>
+        /// 计算一条连线（含曲线/折线）的保守屏幕包围盒，用于「完全在外」粗剔除（不改动端点）。
+        /// 贝塞尔控制点在单轴上至多偏离端点 Distance*0.5、折线拐点落在端点包围盒内，
+        /// 故以 pad = Distance*0.5 + lineWidth 扩张端点包围盒即可包住整条线（含线宽）；
+        /// 过包含无害——真正的边缘裁切由 GL 视口（<see cref="SetGLClip"/>）完成。
+        /// </summary>
+        private static Rect LineBounds(Vector2 a, Vector2 b, LineTypeData line)
+        {
+            float pad  = Vector2.Distance(a, b) * 0.5f + (line?.lineWidth ?? 2f);
+            float xmin = Mathf.Min(a.x, b.x) - pad, xmax = Mathf.Max(a.x, b.x) + pad;
+            float ymin = Mathf.Min(a.y, b.y) - pad, ymax = Mathf.Max(a.y, b.y) + pad;
+            return new Rect(xmin, ymin, xmax - xmin, ymax - ymin);
+        }
+
+        /// <summary>
         /// Liang-Barsky 直线段裁剪：将线段 [p0, p1] 裁剪到矩形 rect 内。
         /// 完全在矩形外时返回 false；否则原地修改 p0/p1 为裁剪后端点并返回 true。
+        /// 保留为公共工具（连线绘制已改用 GL 视口硬件裁剪，不再调用此法）。
         /// </summary>
         public static bool ClipLineToRect(Rect rect, ref Vector2 p0, ref Vector2 p1)
         {
@@ -729,11 +792,10 @@ namespace Ale.NodeTree.Editor
             for (int i = 0; i < colors.Length; i++) colors[i] = color;
             mesh.colors = colors;
 
-            GL.PushMatrix();
-            GL.LoadPixelMatrix();
+            BeginGLClip();
             GetGLMat().SetPass(0);
             Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
-            GL.PopMatrix();
+            EndGLClip();
         }
 
         /// <summary>
