@@ -219,29 +219,6 @@ namespace Ale.NodeTree.Runtime
             return rule.condition.Evaluate(Context).Passed;
         }
 
-        // ── 兼容包装：旧「解锁 / 完成」bool API（映射到 Unlock / Finished 标签） ─────────
-        // 说明：为使旧条件判定器在过渡期仍可编译；随自研条件系统一并移除。
-
-        /// <summary>查询指定节点是否已解锁（等价于 HasTag(nodeId, "Unlock")）。</summary>
-        public bool IsNodeUnlocked(string nodeId) => HasTag(nodeId, NodeTreeTags.Unlock);
-
-        /// <summary>查询指定节点是否已完成（等价于 HasTag(nodeId, "Finished")）。</summary>
-        public bool IsNodeFinished(string nodeId) => HasTag(nodeId, NodeTreeTags.Finished);
-
-        /// <summary>设置指定节点的解锁状态（true 挂 / false 摘 Unlock 标签）。</summary>
-        public void SetNodeUnlocked(string nodeId, bool unlocked)
-        {
-            if (unlocked) AddTag(nodeId, NodeTreeTags.Unlock);
-            else RemoveTag(nodeId, NodeTreeTags.Unlock);
-        }
-
-        /// <summary>设置指定节点的完成状态（true 挂 / false 摘 Finished 标签）。</summary>
-        public void SetNodeFinished(string nodeId, bool finished)
-        {
-            if (finished) AddTag(nodeId, NodeTreeTags.Finished);
-            else RemoveTag(nodeId, NodeTreeTags.Finished);
-        }
-
         // ── 内部辅助 ────────────────────────────────────────────────────────────
 
         private NodeTagState FindState(string nodeId) => _data.nodes.Find(n => n != null && n.nodeId == nodeId);

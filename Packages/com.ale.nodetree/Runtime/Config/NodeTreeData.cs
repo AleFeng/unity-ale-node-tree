@@ -5,7 +5,7 @@ namespace Ale.NodeTree.Runtime
 {
     /// <summary>
     /// 节点树配置资产（ScriptableObject）。
-    /// 存储所有节点实例、节点类型定义、条件类型定义、状态标签词表及全局布局设置。
+    /// 存储所有节点实例、节点类型定义、状态标签词表及全局布局设置。
     /// 通过菜单 NodeTree System/Config Node Tree 创建。
     /// </summary>
     [CreateAssetMenu(fileName = "ConfigNodeTree", menuName = "NodeTree System/Config Node Tree")]
@@ -16,9 +16,6 @@ namespace Ale.NodeTree.Runtime
 
         [Header("节点类型定义")]
         public List<NodeTypeData> nodeTypes = new List<NodeTypeData>(); // 节点类型定义，决定外观与 UI 预制体
-
-        [Header("条件类型定义")]
-        public List<NodeConditionTypeData> conditionTypes = new List<NodeConditionTypeData>(); // 可用的条件类型元数据列表
 
         [Header("状态标签定义")]
         public List<NodeTagData> tags = new List<NodeTagData>(); // 节点运行时状态标签词表（内置 Unlock / Finished，可自定义）
@@ -102,7 +99,7 @@ namespace Ale.NodeTree.Runtime
         }
 
         /// <summary>
-        /// 新建资产时自动填充内置节点类型（普通 / 结局）、内置条件类型（NodeUnlocked / NodeFinished）
+        /// 新建资产时自动填充内置节点类型（普通 / 结局）、内置状态标签（Unlock / Finished）
         /// 以及一个默认的开始节点。
         /// Unity 在通过 CreateAssetMenu 创建资产以及 Inspector Reset 时均会调用此方法。
         /// 所有 Ensure* 辅助方法均保证幂等，不会重复添加已存在的条目。
@@ -112,10 +109,6 @@ namespace Ale.NodeTree.Runtime
             // 默认节点类型
             EnsureBuiltinNodeType("普通", ENodeShape.Circle, new Vector2(100f, 100f), new Color(0.6f, 0.8f, 0.8f));
             EnsureBuiltinNodeType("结局", ENodeShape.Hexagon, new Vector2(130f, 130f), new Color(0.6f, 0.9f, 0.3f));
-
-            // 默认条件类型
-            EnsureBuiltinConditionType("NodeUnlocked", "节点已解锁（对应 NodeTreeSaveDataManager.IsNodeUnlocked）");
-            EnsureBuiltinConditionType("NodeFinished", "节点已完成（对应 NodeTreeSaveDataManager.IsNodeFinished）");
 
             // 默认状态标签（Unlock 自动刷新 / Finished 手动设置）
             EnsureBuiltinTag(NodeTreeTags.Unlock, "已解锁", true);
@@ -156,21 +149,6 @@ namespace Ale.NodeTree.Runtime
                 resolution = resolution,
                 color      = color,
                 line       = new LineTypeData()
-            });
-        }
-
-        /// <summary>
-        /// 若 conditionTypes 列表中不存在指定 conditionType，则追加一条新记录。
-        /// 已存在时直接返回，不做任何修改（保证幂等）。
-        /// </summary>
-        private void EnsureBuiltinConditionType(string conditionType, string description)
-        {
-            foreach (var ct in conditionTypes)
-                if (ct.conditionType == conditionType) return;
-            conditionTypes.Add(new NodeConditionTypeData
-            {
-                conditionType = conditionType,
-                description   = description
             });
         }
 
