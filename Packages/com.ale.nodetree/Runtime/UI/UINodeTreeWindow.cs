@@ -519,6 +519,10 @@ namespace Ale.NodeTree.Runtime
         private readonly Dictionary<string, CanvasRenderer> _lineCanvasRenderers   = new Dictionary<string, CanvasRenderer>();
         private readonly Dictionary<string, Material>       _lineMaterialInstances = new Dictionary<string, Material>();
 
+        // 连线段分组缓存（按子节点类型名）：复用字典与列表，每次重建仅清空列表内容，避免重复 new 造成 GC
+        private readonly Dictionary<string, List<(Vector3 from, Vector3 to)>> _segmentsByType
+            = new Dictionary<string, List<(Vector3 from, Vector3 to)>>();
+
         /// <summary>标记连线 Mesh 为脏，将在下一次 LateUpdate 中重建。</summary>
         public void MarkLineDirty() => _lineMeshDirty = true;
         private bool _lineMeshDirty = true;
@@ -587,12 +591,13 @@ namespace Ale.NodeTree.Runtime
         {
             if (!config) return;
 
-            // 按 typeName 分组收集所有连线段（局部空间坐标）
-            var segmentsByType = new Dictionary<string, List<(Vector3 from, Vector3 to)>>();
+            // 按子节点类型分组收集所有连线段（局部空间坐标）。复用缓存字典与列表：仅清空列表内容、
+            // 不重建对象，避免每次重建产生 GC。
+            foreach (var kv in _segmentsByType) kv.Value.Clear();
 
             foreach (var node in config.nodes)
             {
-                if (node == null) continue;
+                if (node == null || node.childNodeIds == null) continue;
                 foreach (var childId in node.childNodeIds)
                 {
                     var child = config.GetNode(childId);
@@ -603,10 +608,10 @@ namespace Ale.NodeTree.Runtime
                     if (childType == null) continue;
 
                     var typeName = child.nodeTypeRef;
-                    if (!segmentsByType.TryGetValue(typeName, out var list))
+                    if (!_segmentsByType.TryGetValue(typeName, out var list))
                     {
                         list = new List<(Vector3, Vector3)>();
-                        segmentsByType[typeName] = list;
+                        _segmentsByType[typeName] = list;
                     }
 
                     // 使用局部空间坐标（与节点 anchoredPosition 在同一坐标系）
@@ -624,7 +629,7 @@ namespace Ale.NodeTree.Runtime
                 var oldMesh = cr.GetMesh();
                 if (oldMesh) Destroy(oldMesh);
 
-                if (!segmentsByType.TryGetValue(typeName, out var segments) || segments.Count == 0)
+                if (!_segmentsByType.TryGetValue(typeName, out var segments) || segments.Count == 0)
                 {
                     cr.SetMesh(null);
                     continue;
