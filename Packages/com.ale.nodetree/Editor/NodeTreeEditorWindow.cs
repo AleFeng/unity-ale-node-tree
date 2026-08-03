@@ -993,6 +993,9 @@ namespace Ale.NodeTree.Editor
             // 最后画箭头（在节点之上，保证不被节点形状遮挡）
             DrawConnectionArrows(localRect);
 
+            // 底部常驻操作说明栏（黑底白字，位于连线模式提示之下）
+            DrawOperationHint(localRect);
+
             // 连线添加模式提示条（最顶层覆盖显示）
             DrawAddConnectionModeHint(localRect);
 
@@ -1227,8 +1230,8 @@ namespace Ale.NodeTree.Editor
         #region 中央视口操作
         /// <summary>
         /// 处理画布鼠标/滚轮交互：
-        /// Alt+滚轮缩放（以鼠标位置为中心），滚轮垂直平移，中键拖拽平移，
-        /// 左键点击空白取消选中，左键拖拽移动节点，左键释放结束拖拽。
+        /// 滚轮以光标为中心缩放，中键拖拽平移，
+        /// 左键点击空白取消选中，左键拖拽移动节点，左键释放结束拖拽，右键空白弹出画布菜单。
         /// </summary>
         private void HandleCanvasInput(Rect canvasRect)
         {
@@ -1242,9 +1245,8 @@ namespace Ale.NodeTree.Editor
             {
                 case EventType.ScrollWheel:
                     if (!inCanvas) break;
-                    if (evt.alt)
                     {
-                        // Alt+滚轮缩放，以鼠标位置为中心
+                        // 滚轮：以光标为中心缩放（平移改由中键拖拽完成）
                         float delta   = -evt.delta.y * 0.05f;
                         float newZoom = Mathf.Clamp(_canvas.Zoom + delta,
                             NodeTreeCanvasState.MinZoom, NodeTreeCanvasState.MaxZoom);
@@ -1255,14 +1257,6 @@ namespace Ale.NodeTree.Editor
                         var afterScreen = _canvas.CanvasToScreen(beforeCanvas);
                         _canvas.PanOffset += localMouse - afterScreen;
 
-                        evt.Use();
-                        Repaint();
-                    }
-                    else if (!evt.alt && !evt.control)
-                    {
-                        // 普通滚轮：垂直平移
-                        // Y 轴向上：滚轮向下（delta.y > 0）应让内容向上移动，需增大 panOffset.y
-                        _canvas.PanOffset.y += evt.delta.y * 3f;
                         evt.Use();
                         Repaint();
                     }
@@ -1793,7 +1787,9 @@ namespace Ale.NodeTree.Editor
             var size    = style.CalcSize(content);
             float w     = Mathf.Min(size.x + 24f, localBounds.width - 20f);
             float h     = size.y + 12f;
-            var   rect  = new Rect((localBounds.width - w) * 0.5f, localBounds.height - h - 12f, w, h);
+            // Y 上移一个操作说明栏高度，避免与底部常驻说明栏重叠
+            var   rect  = new Rect((localBounds.width - w) * 0.5f,
+                                   localBounds.height - h - 12f - OperationHintHeight, w, h);
 
             EditorGUI.DrawRect(rect, new Color(0.08f, 0.06f, 0f, 0.92f));
             var bc = new Color(1f, 0.75f, 0.1f, 0.85f);
@@ -1802,6 +1798,34 @@ namespace Ale.NodeTree.Editor
             EditorGUI.DrawRect(new Rect(rect.x,         rect.y,         1f, rect.height), bc);
             EditorGUI.DrawRect(new Rect(rect.xMax - 1f, rect.y,         1f, rect.height), bc);
             GUI.Label(rect, content, style);
+        }
+
+        // ── 底部操作说明栏 ──
+        private const float OperationHintHeight = 22f;   // 底部操作说明栏高度（像素）
+        private GUIStyle    _operationHintStyle;         // 说明栏样式（缓存）
+        private GUIContent  _operationHintContent;       // 说明文案（恒定，缓存）
+
+        /// <summary>
+        /// 在画布底部绘制一行常驻操作说明（全宽、黑色半透明底、白字居中）。
+        /// 仅 Repaint 时绘制；坐标为画布局部坐标（GUI.BeginClip 内）。
+        /// </summary>
+        private void DrawOperationHint(Rect localBounds)
+        {
+            if (Event.current.type != EventType.Repaint) return;
+
+            _operationHintContent ??= new GUIContent(
+                "鼠标中键：拖拽平移　·　滚轮：缩放　·　左键：选中节点/连线　·　右键：节点 / 连线 / 画布 菜单");
+            var style = _operationHintStyle ??= new GUIStyle(EditorStyles.miniLabel)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize  = 11,
+                normal    = { textColor = new Color(1f, 1f, 1f, 0.9f) }
+            };
+
+            var rect = new Rect(0f, localBounds.height - OperationHintHeight,
+                                localBounds.width, OperationHintHeight);
+            EditorGUI.DrawRect(rect, new Color(0f, 0f, 0f, 0.6f)); // 黑色半透明底
+            GUI.Label(rect, _operationHintContent, style);
         }
         
         /// <summary>
