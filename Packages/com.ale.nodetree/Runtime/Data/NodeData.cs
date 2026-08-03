@@ -68,20 +68,31 @@ namespace Ale.NodeTree.Runtime
         /// 为新增标签补一条空条件规则、移除已删标签的规则。幂等，可在编辑器中反复调用。
         /// </summary>
         /// <param name="config">节点所属的 NodeTreeData（用于取标签词表）。</param>
-        public void RebuildTagRules(NodeTreeData config)
+        /// <returns>本次同步是否改变了 tagRules（新增/移除任一规则，含计数中性的重命名场景）。</returns>
+        public bool RebuildTagRules(NodeTreeData config)
         {
             var tags = config != null ? config.tags : null;
-            if (tags == null) { tagRules.Clear(); return; }
+            if (tags == null)
+            {
+                if (tagRules.Count == 0) return false;
+                tagRules.Clear();
+                return true;
+            }
 
             // 移除：tagRules 中标签已从词表删除的项
-            tagRules.RemoveAll(r => r == null || !TagExists(tags, r.tagName));
+            int removed  = tagRules.RemoveAll(r => r == null || !TagExists(tags, r.tagName));
+            bool changed = removed > 0;
             // 补充：词表中存在但 tagRules 尚无的标签
             foreach (var t in tags)
             {
                 if (t == null || string.IsNullOrEmpty(t.tagName)) continue;
                 if (GetTagRule(t.tagName) == null)
+                {
                     tagRules.Add(new NodeTagRule(t.tagName));
+                    changed = true;
+                }
             }
+            return changed;
         }
 
         /// <summary>取指定标签的挂载规则，未找到返回 null。</summary>

@@ -92,6 +92,7 @@ namespace Ale.NodeTree.Editor
             if (config)
             {
                 window._config = config;
+                window.ResetSelectionState(); // 切换配置：清理旧配置残留选中状态
                 EditorPrefs.SetString(PrefKeyConfigPath, AssetDatabase.GetAssetPath(config));
                 window.RebuildLists();
             }
@@ -157,9 +158,35 @@ namespace Ale.NodeTree.Editor
         private void OnUndoRedoPerformed()
         {
             if (!_config) return;
-            _configSo = null; // 强制重建，避免撤销后 SerializedObject 缓存与数据不一致
+            // 目标未变则 Update() 重新同步已回滚的数据（保留条件折叠态 isExpanded）；否则重建
+            if (_configSo != null && _configSo.targetObject == _config)
+                _configSo.Update();
+            else
+                _configSo = null;
+            // 撤销/重做后选中节点可能已不存在（如 ID 改名被回滚），清理避免右侧面板陈旧空白
+            if (!string.IsNullOrEmpty(_canvas.SelectedNodeId) && _config.GetNode(_canvas.SelectedNodeId) == null)
+                _canvas.SelectedNodeId = null;
             RebuildLists(); // 同时会将 _needDuplicateCheck 置 true
             Repaint();
+        }
+
+        /// <summary>
+        /// 切换/加载配置后，清理指向旧配置实体的残留选中/悬停/连线状态，
+        /// 避免右侧面板与画布显示陈旧内容（Draw 路径已能容错，但不清理会显示旧选中直到用户点击）。
+        /// </summary>
+        private void ResetSelectionState()
+        {
+            _selectedNodeTypeIdx   = -1;
+            _canvas.SelectedNodeId = null;
+            _selectedConnFrom      = null;
+            _selectedConnTo        = null;
+            _hoveredNodeId         = null;
+            _hoveredConnFrom       = null;
+            _hoveredConnTo         = null;
+            _isAddingConnection    = false;
+            _connectionSourceId    = null;
+            _idDuplicateWarning    = null;
+            _lastPropertyNodeId    = null;
         }
 
         /// <summary>
@@ -307,8 +334,21 @@ namespace Ale.NodeTree.Editor
             };
             _nodeTypeList.onRemoveCallback = list =>
             {
+                if (list.index < 0 || list.index >= _config.nodeTypes.Count) return; // 无选中/越界守护
                 Undo.RecordObject(_config, "删除节点类型");
+                string removedType = _config.nodeTypes[list.index]?.typeName;
                 _config.nodeTypes.RemoveAt(list.index);
+
+                // 清理引用了被删类型的节点：置空 nodeTypeRef（回落默认外观），避免悬空引用
+                if (!string.IsNullOrEmpty(removedType))
+                {
+                    int affected = 0;
+                    foreach (var n in _config.nodes)
+                        if (n != null && n.nodeTypeRef == removedType) { n.nodeTypeRef = null; affected++; }
+                    if (affected > 0)
+                        Debug.LogWarning($"[NodeTree] 删除节点类型「{removedType}」后，{affected} 个引用该类型的节点已置空 nodeTypeRef（回落默认外观），请重新指定类型。", _config);
+                }
+
                 RebuildTypeNameCache();
                 MarkDirty();
             };
@@ -350,6 +390,7 @@ namespace Ale.NodeTree.Editor
             };
             _tagList.onRemoveCallback = list =>
             {
+                if (list.index < 0 || list.index >= _config.tags.Count) return; // 无选中/越界守护
                 Undo.RecordObject(_config, "删除标签");
                 _config.tags.RemoveAt(list.index);
                 MarkDirty();
@@ -391,6 +432,7 @@ namespace Ale.NodeTree.Editor
                 if (newConfig != _config)
                 {
                     _config = newConfig;
+                    ResetSelectionState(); // 切换配置：清理旧配置残留选中状态
                     if (_config)
                     {
                         EditorPrefs.SetString(PrefKeyConfigPath,
@@ -797,6 +839,10 @@ namespace Ale.NodeTree.Editor
         /// </summary>
         private void DrawNodeProperties(NodeData node)
         {
+            // 合并本帧内所有 Undo 操作（顶部 RecordObject 与条件 SerializedObject.ApplyModifiedProperties 等）
+            // 为一步，使一次逻辑编辑对应一次 Ctrl+Z（末尾 CollapseUndoOperations 收束）。
+            int undoGroup = Undo.GetCurrentGroup();
+
             // 节点切换时清除上一个节点遗留的重名警告
             if (_lastPropertyNodeId != node.nodeId)
             {
@@ -947,6 +993,8 @@ namespace Ale.NodeTree.Editor
 
             if (EditorGUI.EndChangeCheck())
                 MarkDirty();
+
+            Undo.CollapseUndoOperations(undoGroup);
         }
 
         /// <summary>
@@ -958,10 +1006,8 @@ namespace Ale.NodeTree.Editor
         {
             EditorGUILayout.LabelField("状态标签条件", EditorStyles.boldLabel);
 
-            // 按标签词表同步该节点的标签规则（补新增 / 删移除），结构变化时落盘
-            int before = node.tagRules.Count;
-            node.RebuildTagRules(_config);
-            if (node.tagRules.Count != before) MarkDirty();
+            // 按标签词表同步该节点的标签规则（补新增 / 删移除）；任一变化（含计数中性的标签重命名）都落盘
+            if (node.RebuildTagRules(_config)) MarkDirty();
 
             if (node.tagRules.Count == 0)
             {
