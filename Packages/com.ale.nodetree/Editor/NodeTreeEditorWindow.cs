@@ -237,10 +237,10 @@ namespace Ale.NodeTree.Editor
         /// 不调用 AssetDatabase.SaveAssets()，避免每次修改都阻塞编辑器。
         /// 同时标记需要重新扫描重名节点。
         /// </summary>
-        private void MarkDirty()
+        private void MarkDirty(bool rescanDuplicates = true)
         {
             if (!_config) return;
-            _needDuplicateCheck = true; // 节点数据已变，下一帧重新检查重名
+            if (rescanDuplicates) _needDuplicateCheck = true; // 仅结构/ID 可能变化时重扫重名；纯位置变化（拖拽）不需
             EditorUtility.SetDirty(_config);
             // AssetDatabase.SaveAssets() 太频繁会卡顿，改为实时 SetDirty，Unity 自动在适当时机写盘
         }
@@ -831,6 +831,7 @@ namespace Ale.NodeTree.Editor
         private string _idDuplicateWarning; // 当前检测到的重复 ID 输入值（非空时显示警告）
         private string _snapIdDuplicateWarning; // Layout 快照，保证 Repaint 控件数量与 Layout 完全一致
         private string _lastPropertyNodeId; // 上次 DrawNodeProperties 渲染的节点 ID（节点切换时清除警告）
+        private GUIContent _tagRuleLabel;   // 标签条件行标签（复用，避免每标签每帧 new GUIContent）
         
         /// <summary>
         /// 右侧面板 节点 可编辑属性：
@@ -1027,6 +1028,7 @@ namespace Ale.NodeTree.Editor
             var tagRulesProp = nodesProp.GetArrayElementAtIndex(nodeIdx).FindPropertyRelative("tagRules");
             if (tagRulesProp == null) return;
 
+            _tagRuleLabel ??= new GUIContent(); // 复用，避免每标签每帧 new GUIContent
             for (int j = 0; j < node.tagRules.Count && j < tagRulesProp.arraySize; j++)
             {
                 var rule = node.tagRules[j];
@@ -1034,7 +1036,8 @@ namespace Ale.NodeTree.Editor
                 string autoHint = meta != null && meta.autoRefresh ? " (自动)" : "";
                 var condProp = tagRulesProp.GetArrayElementAtIndex(j).FindPropertyRelative("condition");
                 if (condProp == null) continue;
-                EditorGUILayout.PropertyField(condProp, new GUIContent($"标签「{rule.tagName}」{autoHint}"), true);
+                _tagRuleLabel.text = $"标签「{rule.tagName}」{autoHint}";
+                EditorGUILayout.PropertyField(condProp, _tagRuleLabel, true);
                 EditorGUILayout.Space(2f);
             }
 
@@ -1486,7 +1489,7 @@ namespace Ale.NodeTree.Editor
                             // XOR：开关开 + Shift → 临时关闭；开关关 + Shift → 临时开启
                             bool shouldSnap = _snapToGrid ^ evt.shift;
                             node.position = shouldSnap ? SnapToGrid(rawPos) : rawPos;
-                            MarkDirty();
+                            MarkDirty(false); // 仅位置变化，跳过重名重扫（避免每拖拽帧分配 Dictionary/HashSet）
                             evt.Use();
                             Repaint();
                         }

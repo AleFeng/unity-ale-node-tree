@@ -312,6 +312,11 @@ namespace Ale.NodeTree.Editor
         private static Material _glMat; // GL 绘制所用材质（Hidden/Internal-Colored），延迟初始化
         private static GUIStyle _nodeLabelStyle; // 节点标签样式（缓存，避免每节点每帧新建）
         private static Mesh     _lineMesh;       // 连线绘制复用的 Mesh（Clear+重填，避免每连线每帧 new/Destroy）
+        // 编辑器连线绘制复用缓冲（避免每连线每帧 new List / new Color[]）
+        private static readonly List<Vector3> _edVerts  = new List<Vector3>(64);
+        private static readonly List<Vector2> _edUvs    = new List<Vector2>(64);
+        private static readonly List<int>     _edTris   = new List<int>(96);
+        private static readonly List<Color>   _edColors = new List<Color>(64);
         private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
         private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
         private static readonly int Cull = Shader.PropertyToID("_Cull");
@@ -757,9 +762,10 @@ namespace Ale.NodeTree.Editor
 
             float halfWidth = lineStyle.lineWidth * zoom * 0.5f;
 
-            var verts = new List<Vector3>();
-            var uvs   = new List<Vector2>();
-            var tris  = new List<int>();
+            _edVerts.Clear(); _edUvs.Clear(); _edTris.Clear();
+            var verts = _edVerts;
+            var uvs   = _edUvs;
+            var tris  = _edTris;
 
             var f3 = new Vector3(from.x, from.y, 0f);
             var t3 = new Vector3(to.x,   to.y,   0f);
@@ -789,10 +795,10 @@ namespace Ale.NodeTree.Editor
             mesh.SetTriangles(tris, 0);
 
             // 颜色写入顶点色（Hidden/Internal-Colored 依据顶点色着色，无需逐实例材质）
-            var color  = colorOverride ?? Color.white;
-            var colors = new Color[verts.Count];
-            for (int i = 0; i < colors.Length; i++) colors[i] = color;
-            mesh.colors = colors;
+            var color = colorOverride ?? Color.white;
+            _edColors.Clear();
+            for (int i = 0; i < verts.Count; i++) _edColors.Add(color);
+            mesh.SetColors(_edColors);
 
             BeginGLClip();
             GetGLMat().SetPass(0);
