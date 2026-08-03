@@ -43,7 +43,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 | `nodeTypes` | `List<NodeTypeData>`、タイプ定義（外観 + UI プレハブ + ライン様式） |
 | `tags` | `List<NodeTagData>`、状態タグの語彙（タグ辞書）。組み込みで `Unlock` / `Finished`、任意に追加可能 |
 | `layoutDirection` | `ELayoutDirection`、キャンバス全体のレイアウト方向 |
-| `zoom` | エディタのキャンバスズーム（エディタが書き込み。ランタイム未使用） |
+| `zoom` | 予約フィールド。現在は未使用（エディタのキャンバスズームは `EditorPrefs` で永続化されます） |
 
 **主な API**：`GetNode(string nodeId)`、`GetNodeType(string typeName)`（見つからない場合は `null`）。
 
@@ -79,7 +79,8 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 `NodeTypeData` はノードの外観・UI・カスタム属性フィールドを記述：`typeName`、`resolution`（サイズ）、`shape`（`ENodeShape`）、`color`、`icon`、`label`、`uiPrefab`（ゲーム内 UI プレハブ、`UINodeBase` が必要）、`line`（`LineTypeData`）、`attributes`（`List<AttributeDefinition>`、`com.ale.toolkit`。本タイプのノードインスタンス用のカスタム属性フィールド schema）。
 
 - **`ENodeShape`**（エディタキャンバスの形状）：`Circle`、`Square`、`Triangle`、`Diamond`、`HorizontalCapsule`、`Parallelogram`、`Pentagon`、`Hexagon`、`Octagon`、`Star`。
-- **`LineTypeData`**：`lineType`（`ELineType`：`Straight` 直線 / `Curve` 曲線 / `Polyline` 折れ線）、`lineWidth`（ピクセル）、`material`（ライン用マテリアル。`NodeTree/NodeLineFlow` と組み合わせると流光表現）。
+- **`LineTypeData`**：`lineType`（`ELineType`：`Straight` 直線 / `Curve` 曲線 / `Polyline` 折れ線）、`lineWidth`（ピクセル）、`material`（ライン用マテリアル。`NodeTree/NodeLineFlow` と組み合わせると流光表現）、`color`（ライン色）。
+- **ライン様式の帰属**：各接続線（矢印を含む）は、その**子（ターゲット）ノードタイプ**の `LineTypeData`（線種 / 線幅 / マテリアル / 色）で描画されます —— すなわち「親からこの（子）タイプのノードへ向かう既定のライン様式」です（従来は**親**ノードタイプで描画していました）。
 
 ### 状態タグ `NodeTagData` / タグルール `NodeTagRule`
 
@@ -132,7 +133,7 @@ public sealed class MyEvaluator : IConditionEvaluator
 - **汎用タグ**：`bool HasTag(string nodeId, string tag)`、`void AddTag(string nodeId, string tag)`、`void RemoveTag(string nodeId, string tag)`、`IReadOnlyCollection<string> GetTags(string nodeId)`、`void ClearNode(string nodeId)`。
 - **一括入出力 / シリアライズ**：`NodeTreeSaveData Get()`、`void Set(NodeTreeSaveData)`、`string Save()`（JSON を返す）、`void Load(string json)`、`void Reset()`（全記録をクリア、「ニューゲーム」用）。実際の落とし込みは宿主に委ねます。データ構造 `NodeTreeSaveData { List<NodeTagState> nodes }`、`NodeTagState { string nodeId; List<string> tags; }`。
 - **便利ファサード**（内部で条件を自己判定し、設定できたかを返す）：`bool TrySetTag(NodeTreeData config, string nodeId, string tag)`、`bool TrySetUnlock(NodeTreeData config, string nodeId)`、`bool TrySetFinished(NodeTreeData config, string nodeId)`。
-- **一括再計算**：`void RefreshAllNodeStates(NodeTreeData config)` —— `autoRefresh` タグを条件で再計算して付与（達成で付与・単調で外さない・不動点反復で連鎖解放に対応）。
+- **一括再計算**：`void RefreshAllNodeStates(NodeTreeData config)` —— `autoRefresh` タグを条件で再計算して付与（達成で付与・単調で外さない・不動点反復で連鎖解放に対応）。**注意**：`autoRefresh` タグの**空条件は通過扱い（fail-open）**です。開始 / ルートノードがこれにより自動で解放されるのは想定どおりですが、非ルートノードは `Unlock` 条件を**明示的に設定**しないと、自動でタグが付与されてしまいます。
 
 ```csharp
 var save = NodeTreeSaveDataManager.Instance;
@@ -190,6 +191,8 @@ save.Load(json);
 - **`NodeTreeEditorWindow`**（`EditorWindow`、IMGUI + GL）：3 カラムレイアウト —— 左：**ノードタイプ / タグ管理**（左側の切替タブは「ノードタイプ / タグ」。旧「条件タイプ」タブは削除済み）、中央：**キャンバス**（ノードのドラッグ / ズーム / パン / 接続）、右：**ノードプロパティパネル**。ノードの追加 / 削除、サブツリーの切り離し、自動レイアウトに対応。すべての変更は `Undo.RecordObject` + `EditorUtility.SetDirty` を通し、**Undo / Redo に完全対応しアセットを保存**します。キャンバスのパン / ズーム / 最後に開いた設定は `EditorPrefs` に永続化。
   - **「タグ」タブ**：上部の「タグ設定」区に**「Unlock 条件を自動書き込み」**トグルがあります（プロジェクト単位の設定。`ProjectSettings/NodeTreeEditorSettings.asset` に保存され、リポジトリ経由で共有）。オンのとき、キャンバスで「子ノードを追加 / 接続」すると、子ノードの `Unlock` ルールへ `NodeTree.NodeFinished(target = 親 ID)` 条件が自動で書き込まれます。
   - **右のノードプロパティパネル**：各タグごとに、Toolkit の `ConditionExpression` インライン描画器でそのタグの付与条件を編集できます（`NodeData.tagRules` の各ルールを `NodeTreeData.tags` 語彙に沿って表示）。
+  - **ビューポート操作**：ホイールは**カーソル位置を中心にズーム**、キャンバスの平行移動は**マウス中ボタンドラッグ**で行います。キャンバス下部には**常駐の操作説明バー**（黒地・半透明、白文字）を表示します。
+  - **キャンバス空白部の右クリックメニュー**：ビューポートをリセット / すべてのノードを表示（全体が収まるようズーム）/ 開始ノードへ移動 / ここに新規ノードを作成（カーソル位置に配置。Undo 可）/ 自動レイアウト / グリッド吸着の切り替え。
 - **`NodeDrawer`**（静的）：IMGUI + GL でノード形状（円 / 四角 / 多角形など）と接続線（直線 / ベジェ / 折れ線）を描画。`Repaint` 時のみ。
 - **`NodeTreeCanvasState`**：キャンバスの操作状態（パン / ズーム / 選択 / ドラッグ）とキャンバス↔スクリーン座標の相互変換。
 - **`NodeTreeDataEditor`**：`NodeTreeData` のカスタム Inspector。上部に「Node Tree Editor で編集」ボタンを追加。
@@ -198,7 +201,7 @@ save.Load(json);
 
 ## ラインシェーダー `NodeTree/NodeLineFlow`
 
-URP 透明の**流光ライン**シェーダー：メインテクスチャ + フローテクスチャの UV スクロール、エッジフェード（`_EdgeFade`）、グロー（`_Glow`）、全体アルファ（`_Alpha`）、流光カラー（HDR）。このシェーダーを使うマテリアルをノードタイプの `LineTypeData.material` に設定すると、そのタイプの接続線が動的な流光を示します。
+URP 透明の**流光ライン**シェーダー：メインテクスチャ + フローテクスチャの UV スクロール、エッジフェード（`_EdgeFade`）、グロー（`_Glow`）、全体アルファ（`_Alpha`）、流光カラー（HDR）。このシェーダーを使うマテリアルをノードタイプの `LineTypeData.material` に設定すると、その**子（ターゲット）タイプ**へ向かう接続線が動的な流光を示します。
 
 ---
 

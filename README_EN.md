@@ -46,7 +46,7 @@ One `NodeTreeData` asset centralizes **nodes, node types, status tags, and canva
 ## Introduction
 Many games need a "nodes + connections + unlock conditions" tree — skill trees, tech trees, level progression, story progression… but rebuilding editor drawing, connection rendering, viewport performance, and unlock evaluation from scratch every time is costly. Ale Node Tree gathers them into **one data asset** and **one toolchain**:
 
-1. **Visual editing** — one `NodeTreeData` holds the whole tree; the editor is a three-column layout (left type management + center canvas with drag / zoom / pan / connect + right property panel), drawing node shapes and connections in real time with IMGUI + GL, fully Undo / Redo aware.
+1. **Visual editing** — one `NodeTreeData` holds the whole tree; the editor is a three-column layout (left type management + center canvas with drag, cursor-centered wheel zoom, middle-mouse pan, and connect — plus a bottom hint bar and a blank-canvas right-click menu for reset / frame all / focus start / new node here / auto-layout / grid snap — + right property panel), drawing node shapes and connections in real time with IMGUI + GL, fully Undo / Redo aware.
 2. **Data-driven unlocking** — each node carries one rule per status tag whose gate is a `ConditionExpression` (two-level AND / OR: expression → group → item); evaluation is delegated to **condition evaluators** (Toolkit `Ale.Condition`); built-in `NodeFinished` / `NodeUnlocked` / `NodeHasTag` evaluators, and a custom rule is just one interface away.
 3. **High-performance runtime** — runtime UI is pooled per node type, Spawned / Despawned on demand via viewport culling, and line meshes are batched per type to cut draw calls; a URP flowing-line shader is included.
 4. **Save-friendly** — `NodeTreeSaveDataManager` tracks each node's **tags** with JSON serialization; `Get()` / `Set()` / `Save()` / `Load()` plug into any game save system.
@@ -59,7 +59,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 | Visual editor | Three-column layout + canvas drag / zoom / pan / connect; add/delete nodes, cut subtrees, auto-layout; IMGUI + GL draws 10 node shapes and straight / curve / polyline connections. |
 | Extensible conditions | Each status tag's gate is a `ConditionExpression`; judgement is done by `IConditionEvaluator` (Toolkit `Ale.Condition`); built-in `NodeFinished` / `NodeUnlocked` / `NodeHasTag`, custom rules via a single interface. |
 | High-performance runtime UI | Object pooling per node type (via `com.ale.toolkit`), on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls. |
-| URP flowing lines | `NodeTree/NodeLineFlow` transparent flow shader (flow texture / edge fade / glow / HDR color); line style is configured per node type. |
+| URP flowing lines | `NodeTree/NodeLineFlow` transparent flow shader (flow texture / edge fade / glow / HDR color); each connection (with its arrow) takes the line style of its child (target) node type. |
 | Save-friendly | `NodeTreeSaveDataManager` tracks each node's tags, JSON serialization, `Get()` / `Set()` / `Save()` / `Load()` for external saves. |
 | Base-package integration | Node name / description localization via `com.ale.toolkit`'s `AttributeValue`(Text) (multilingual when `ATK_LOCALIZATION` is on, else plain text); hover popup fade via `com.ale.toolkit`'s central tween; object pooling via `com.ale.toolkit`. The plugin itself has no localization / DOTween macro. |
 
@@ -143,6 +143,8 @@ var save = NodeTreeSaveDataManager.Instance;
 save.TrySetFinished(config, "chapter_01");   // finished this chapter (a Finished condition is usually empty = passes directly)
 
 // After opening the panel / loading a save, refresh all auto tags (Unlock unlocks in chains by prerequisite completion)
+// Note: an autoRefresh tag with an empty condition is fail-open (treated as passing), so start / root nodes auto-unlock as intended;
+// non-root nodes must configure an explicit Unlock condition, otherwise they get auto-tagged as well.
 save.RefreshAllNodeStates(config);
 bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
 

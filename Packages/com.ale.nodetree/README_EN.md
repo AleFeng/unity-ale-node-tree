@@ -43,7 +43,7 @@ The single source of truth for the whole tree (`ScriptableObject`). Create it vi
 | `nodeTypes` | `List<NodeTypeData>`, type definitions (appearance + UI prefab + line style) |
 | `tags` | `List<NodeTagData>`, the tag vocabulary (state tags a node can carry); seeded with `Unlock` (auto-refresh) and `Finished` |
 | `layoutDirection` | `ELayoutDirection`, overall canvas layout direction |
-| `zoom` | Editor canvas zoom (written by the editor; unused at runtime) |
+| `zoom` | Reserved field, currently unused; editor canvas zoom is persisted via `EditorPrefs` |
 
 **Main API**: `GetNode(string nodeId)`, `GetNodeType(string typeName)` (return `null` when not found).
 
@@ -79,11 +79,11 @@ A node instance stored in `NodeTreeData.nodes`.
 `NodeTypeData` describes a category of node's appearance, UI and custom attribute fields: `typeName`, `resolution` (size), `shape` (`ENodeShape`), `color`, `icon`, `label`, `uiPrefab` (in-game UI prefab, must have `UINodeBase`), `line` (`LineTypeData`), `attributes` (`List<AttributeDefinition>`, `com.ale.toolkit`; the custom attribute-field schema for node instances of this type).
 
 - **`ENodeShape`** (editor canvas shapes): `Circle`, `Square`, `Triangle`, `Diamond`, `HorizontalCapsule`, `Parallelogram`, `Pentagon`, `Hexagon`, `Octagon`, `Star`.
-- **`LineTypeData`**: `lineType` (`ELineType`: `Straight` / `Curve` / `Polyline`), `lineWidth` (pixels), `material` (line material; pair it with `NodeTree/NodeLineFlow` for a flow effect).
+- **`LineTypeData`**: `lineType` (`ELineType`: `Straight` / `Curve` / `Polyline`), `lineWidth` (pixels), `material` (line material; pair it with `NodeTree/NodeLineFlow` for a flow effect). Each connection (including its arrow) is drawn with the **target (child) node type's** `LineTypeData` — i.e. the default line style from the parent to **this (child)** type node.
 
 ### State tags `NodeTagData` / tag rules `NodeTagRule`
 
-- `NodeTagData`: one entry in the tree-wide tag vocabulary — `tagName`, `description`, `color` (editor display tint), `autoRefresh` (whether `RefreshAllNodeStates` recomputes this tag from its condition). Built-in `Unlock` (`autoRefresh = true`) and `Finished` (`autoRefresh = false`); add your own freely.
+- `NodeTagData`: one entry in the tree-wide tag vocabulary — `tagName`, `description`, `color` (editor display tint), `autoRefresh` (whether `RefreshAllNodeStates` recomputes this tag from its condition). Built-in `Unlock` (`autoRefresh = true`) and `Finished` (`autoRefresh = false`); add your own freely. Note that for an `autoRefresh` tag an **empty condition passes (fail-open)**, so give every non-root node an explicit `Unlock` condition or it will be auto-tagged.
 - `NodeTagRule`: a per-node, per-tag rule — `tagName` + `condition` (`ConditionExpression`, `com.ale.toolkit`). The `condition` is the gate for attaching that tag **on this node**; an empty expression means no gate (always passes). Rules are kept in sync with the vocabulary via `NodeData.RebuildTagRules`, and fetched via `NodeData.GetTagRule(tagName)`.
 - Node custom attributes: the template side `NodeTypeData.attributes` (`List<AttributeDefinition>`, `com.ale.toolkit`) defines the field schema; the instance side `NodeData.attributeValues` (`List<AttributeEntry>`) holds the values, kept in sync via `NodeData.RebuildAttributes`.
 
@@ -135,7 +135,7 @@ A static singleton that tracks each node's **tags**. It implements `INodeTreeSta
 - **Generic tag ops**: `bool HasTag(string nodeId, string tag)`, `void AddTag(string nodeId, string tag)`, `void RemoveTag(string nodeId, string tag)`, `IReadOnlyCollection<string> GetTags(string nodeId)`, `void ClearNode(string nodeId)`.
 - **Whole-state & serialization**: `NodeTreeSaveData Get()` / `void Set(NodeTreeSaveData)`, `string Save()` (JSON) / `void Load(string json)`, `void Reset()` (clears all records, for "new game"). Actual persistence is left to the host. Data shape `NodeTreeSaveData { List<NodeTagState> nodes }`, where `NodeTagState { string nodeId; List<string> tags; }`.
 - **Convenience façade** (each self-evaluates the tag's condition and returns whether the tag was set): `bool TrySetTag(NodeTreeData config, string nodeId, string tag)`, `bool TrySetUnlock(NodeTreeData config, string nodeId)`, `bool TrySetFinished(NodeTreeData config, string nodeId)`.
-- **Auto-refresh**: `void RefreshAllNodeStates(NodeTreeData config)` recomputes every `autoRefresh` tag from its condition and attaches it — set once achieved, monotonic (never removed), and iterated to a fixed point so chained unlocks resolve in one call.
+- **Auto-refresh**: `void RefreshAllNodeStates(NodeTreeData config)` recomputes every `autoRefresh` tag from its condition and attaches it — set once achieved, monotonic (never removed), and iterated to a fixed point so chained unlocks resolve in one call. **Note (fail-open)**: an `autoRefresh` tag with an **empty condition is treated as passing**, so the start / root node unlocking automatically here is expected; every non-root node must **explicitly configure its `Unlock` condition**, otherwise it will be auto-tagged as well.
 
 ```csharp
 var save = NodeTreeSaveDataManager.Instance;
@@ -184,7 +184,7 @@ The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach 
 
 ### `NodeLineBuilder`
 
-A static line-mesh builder (usable at runtime): `BuildCombinedLineMesh(segments, LineTypeData, ELayoutDirection)` **merges a batch of parent→child segments into a single mesh** (fewer draw calls) by line type (straight / bezier curve / polyline), with built-in bezier geometry helpers. UV convention: `UV.x` maps to the two sides of the line width (edge fade), `UV.y` is accumulated arc length / 100 (texture density independent of line length).
+A static line-mesh builder (usable at runtime): `BuildCombinedLineMesh(segments, LineTypeData, ELayoutDirection)` **merges a batch of parent→child segments into a single mesh** (fewer draw calls) by line type (straight / bezier curve / polyline), with built-in bezier geometry helpers. Each segment uses the **target (child) node type's** `LineTypeData`, so segments are grouped by their child type's line style. UV convention: `UV.x` maps to the two sides of the line width (edge fade), `UV.y` is accumulated arc length / 100 (texture density independent of line length).
 
 ---
 
@@ -195,6 +195,7 @@ Open via `Tools > NodeTree > Node Tree Editor` (or the "Edit in Node Tree Editor
 - **`NodeTreeEditorWindow`** (`EditorWindow`, IMGUI + GL): three-column layout — left **node-type / tag management**, center **canvas** (drag / zoom / pan / connect nodes), right **node property panel**; supports adding/deleting nodes, cutting subtrees, and auto-layout. All edits go through `Undo.RecordObject` + `EditorUtility.SetDirty`, so the window is **fully Undo / Redo aware and persists the asset**. Canvas pan / zoom / last-opened config are persisted via `EditorPrefs`.
   - The left **Tags** tab manages the `NodeTreeData.tags` vocabulary and has a **Tag settings** block on top with an **"auto-write Unlock condition"** toggle. This is a project-level setting stored in `ProjectSettings/NodeTreeEditorSettings.asset` (shared through version control): when on, adding a child node / drawing a connection on the canvas automatically writes a `NodeTree.NodeFinished(target = parentId)` condition into the child's `Unlock` rule.
   - The right **node property panel** edits each tag's gating condition inline, drawing the `NodeTagRule.condition` with toolkit's `ConditionExpression` inline drawer.
+  - **Canvas viewport UX**: the mouse **wheel zooms centered on the cursor**, and **panning is done by dragging with the middle mouse button**. A **persistent operation-hint bar** sits at the bottom of the canvas (semi-transparent black background, white text). **Right-clicking on empty canvas** opens a context menu: **Reset viewport** / **Show all nodes** (zoom to fit every node) / **Focus start node** / **Create node here** (spawns at the cursor position, Undo-able) / **Auto-layout** / **Snap-to-grid** toggle.
 - **`NodeDrawer`** (static): draws node shapes (circle / square / polygon, etc.) and connections (straight / bezier / polyline) with IMGUI + GL, during `Repaint` only.
 - **`NodeTreeCanvasState`**: canvas interaction state (pan / zoom / selection / drag) and canvas↔screen coordinate conversion.
 - **`NodeTreeDataEditor`**: a custom Inspector for `NodeTreeData` that adds an "Edit in Node Tree Editor" button on top.
@@ -203,7 +204,7 @@ Open via `Tools > NodeTree > Node Tree Editor` (or the "Edit in Node Tree Editor
 
 ## Line shader `NodeTree/NodeLineFlow`
 
-A URP transparent **flowing-line** shader: main texture + flow texture UV scrolling, edge fade (`_EdgeFade`), glow (`_Glow`), global alpha (`_Alpha`), flow color (HDR). Assign a material using this shader to a node type's `LineTypeData.material` to make that type's connections show an animated flow.
+A URP transparent **flowing-line** shader: main texture + flow texture UV scrolling, edge fade (`_EdgeFade`), glow (`_Glow`), global alpha (`_Alpha`), flow color (HDR). Assign a material using this shader to a node type's `LineTypeData.material` to make the connections **into** nodes of that type (the target/child type) show an animated flow.
 
 ---
 

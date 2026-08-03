@@ -56,10 +56,10 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | 特性 | 描述 |
 | --- | --- |
 | 单资产集中配置 | 一个 `NodeTreeData` 承载全部节点、节点类型、标签与画布布局；编辑器仅在 ScriptableObject 上工作，全程 Undo / Redo。 |
-| 可视化编辑器 | 三列布局 + 画布拖拽 / 缩放 / 平移 / 连线；节点增删、子树切除、自动布局；IMGUI + GL 绘制 10 种节点形状与直线 / 曲线 / 折线连线。 |
+| 可视化编辑器 | 三列布局 + 画布拖拽 / 连线；滚轮以光标为中心缩放、鼠标中键平移，底部常驻操作说明栏与空白处右键菜单（重置视口 / 显示全部节点 / 定位起始节点 / 就地新建节点 / 自动布局 / 吸附网格）；节点增删、子树切除、自动布局；IMGUI + GL 绘制 10 种节点形状与直线 / 曲线 / 折线连线。 |
 | 可扩展条件系统 | 挂载条件用 `com.ale.toolkit` 的 `ConditionExpression` 描述，判定由 `IConditionEvaluator` 完成（打 `[ConditionEvaluator("Key")]` 自动注册）；内置「已完成 / 已解锁 / 是否挂某标签」，自定义规则一接口即可接入。 |
 | 高性能运行时 UI | 按节点类型对象池化（基于 `com.ale.toolkit`），视口裁剪按需 Spawn / Despawn，连线 Mesh 合批降 DrawCall。 |
-| URP 流光连线 | `NodeTree/NodeLineFlow` 透明流光 Shader（流动纹理 / 边缘渐变 / 辉光 / HDR 颜色），按节点类型独立配连线样式。 |
+| URP 流光连线 | `NodeTree/NodeLineFlow` 透明流光 Shader（流动纹理 / 边缘渐变 / 辉光 / HDR 颜色），每条连线的样式取自其**子（目标）节点类型**。 |
 | 存档友好 | `NodeTreeSaveDataManager` 以标签制维护各节点状态，JSON 序列化，`Save()` / `Load()` / `Get()` / `Set()` 对接外部存档。 |
 | 底层集成 | 节点名 / 描述本地化经 `com.ale.toolkit` 的 `AttributeValue`(Text)（启用 `ATK_LOCALIZATION` 取多语、否则纯文本）；悬停弹窗淡入淡出基于 `com.ale.toolkit` 中央 Tween；对象池复用 `com.ale.toolkit`。插件本身无本地化 / DOTween 宏。 |
 
@@ -143,6 +143,7 @@ var save = NodeTreeSaveDataManager.Instance;
 save.TrySetFinished(config, "chapter_01");   // 读完本章→置完成（Finished 条件通常为空=直接通过）
 
 // 打开面板 / 加载存档后刷新所有自动标签（Unlock 按前置完成情况链式解锁）
+// 提醒：autoRefresh 标签「空条件视为通过」（fail-open）——起始 / 根节点据此自动解锁属预期；非根节点须显式配置 Unlock 条件，否则会被自动挂上标签。
 save.RefreshAllNodeStates(config);
 bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
 

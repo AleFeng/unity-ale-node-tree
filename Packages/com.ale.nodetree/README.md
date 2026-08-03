@@ -43,7 +43,7 @@
 | `nodeTypes` | `List<NodeTypeData>`，节点类型定义（外观 + UI 预制体 + 连线样式） |
 | `tags` | `List<NodeTagData>`，标签词表（内置 `Unlock` / `Finished`，可自定义） |
 | `layoutDirection` | `ELayoutDirection`，画布整体布局方向 |
-| `zoom` | 编辑器画布缩放（由编辑器写入，运行时不使用） |
+| `zoom` | 保留字段，当前未使用；编辑器画布缩放经 `EditorPrefs` 持久化 |
 
 **主要 API**：`GetNode(string nodeId)`、`GetNodeType(string typeName)`（未找到返回 `null`）。
 
@@ -79,7 +79,8 @@
 `NodeTypeData` 描述某一类节点的外观、UI 与自定义属性字段：`typeName`、`resolution`（尺寸）、`shape`（`ENodeShape`）、`color`、`icon`、`label`、`uiPrefab`（游戏内 UI 预制体，需挂 `UINodeBase`）、`line`（`LineTypeData`）、`attributes`（`List<AttributeDefinition>`，`com.ale.toolkit`，本类型节点实例的自定义属性字段 schema）。
 
 - **`ENodeShape`**（编辑器画布形状）：`Circle`、`Square`、`Triangle`、`Diamond`、`HorizontalCapsule`、`Parallelogram`、`Pentagon`、`Hexagon`、`Octagon`、`Star`。
-- **`LineTypeData`**：`lineType`（`ELineType`：`Straight` 直线 / `Curve` 曲线 / `Polyline` 折线）、`lineWidth`（像素）、`material`（连线材质，配合 `NodeTree/NodeLineFlow` 可做流光效果）。
+- **`LineTypeData`**：`lineType`（`ELineType`：`Straight` 直线 / `Curve` 曲线 / `Polyline` 折线）、`lineWidth`（像素）、`material`（连线材质，配合 `NodeTree/NodeLineFlow` 可做流光效果）、连线颜色。
+  - **样式归属（1.2.0 起）**：每条连线（含箭头）采用其**目标（子）节点类型**的 `LineTypeData` 绘制（线型 / 线宽 / 材质 / 颜色）——即「从父节点连向此类型（子）节点」的默认线样式。此前是按**父**节点类型绘制。
 
 ### 状态标签 `NodeTagData` / 标签规则 `NodeTagRule`
 
@@ -133,6 +134,7 @@ public sealed class MyEvaluator : IConditionEvaluator
 - **整份存取 / 序列化**：`NodeTreeSaveData Get()`（返回当前存档）、`void Set(NodeTreeSaveData)`（覆盖式）、`string Save()`（序列化为 JSON）、`void Load(string json)`（从 JSON 载入）、`void Reset()`（清空所有记录，用于「开新游戏」）。实际落盘交宿主。数据结构 `NodeTreeSaveData { List<NodeTagState> nodes }`，`NodeTagState { string nodeId; List<string> tags; }`。
 - **便捷门面**（内部自判该标签的 `ConditionExpression`，返回是否设置成功）：`bool TrySetTag(NodeTreeData config, string nodeId, string tag)`、`bool TrySetUnlock(config, nodeId)`、`bool TrySetFinished(config, nodeId)`。
 - **批量刷新**：`void RefreshAllNodeStates(NodeTreeData config)` —— 对 `autoRefresh` 标签（如 `Unlock`）按条件重算并挂上：**达成即挂、单调不摘、定点迭代**（支持链式解锁）。
+  - ⚠️ **提醒**：`autoRefresh` 标签的**空条件视为通过（fail-open）**——起始 / 根节点据此自动解锁属预期；非根节点须**显式配置 `Unlock` 条件**，否则空条件恒通过会被自动挂上标签。
 
 ```csharp
 var save = NodeTreeSaveDataManager.Instance;
@@ -188,6 +190,10 @@ save.Load(json);
 `Tools > NodeTree > Node Tree Editor`（或在 `NodeTreeData` 资产的 Inspector 点「在 Node Tree Editor 中编辑」）打开。
 
 - **`NodeTreeEditorWindow`**（`EditorWindow`，IMGUI + GL）：三列布局 —— 左侧**节点类型 / 标签管理**（原「条件类型」页签已删）、中央**画布**（节点拖拽 / 缩放 / 平移 / 连线）、右侧**节点属性面板**；支持节点增删、子树切除、自动布局，所有修改经 `Undo.RecordObject` + `EditorUtility.SetDirty`，**全程 Undo / Redo 并触发资产保存**。画布平移 / 缩放 / 上次打开的配置经 `EditorPrefs` 持久化。
+  - **画布视口交互（1.2.0 起）**：
+    - **滚轮以光标为中心缩放**；画布平移改由**鼠标中键拖拽**。
+    - 画布**底部常驻操作说明栏**（黑底半透明、白字），提示当前可用的鼠标 / 快捷操作。
+    - 画布**空白处右键菜单**：重置视口 / 显示全部节点（缩放至框住全部）/ 定位到起始节点 / 在此处新建节点（落在光标处，可 Undo）/ 自动布局 / 吸附网格开关。
   - **「标签」页签**：维护 `NodeTreeData.tags` 词表（增删标签、改名 / 说明 / 颜色 / `autoRefresh`）。顶部「标签设置」区含**「自动写入 Unlock 条件」**开关——项目级设置（存 `ProjectSettings/NodeTreeEditorSettings.asset`，随版本库共享）：开启时在画布「添加子节点 / 连线」会自动向子节点的 `Unlock` 规则写入 `NodeTree.NodeFinished(target = 父节点 ID)` 条件。
   - **右侧节点属性面板**：对每个标签用 Toolkit 的 `ConditionExpression` 内联绘制器（`ConditionExpressionDrawer`）编辑其在本节点的挂载条件，内置判定器可从下拉直接选择。
 - **`NodeDrawer`**（静态）：用 IMGUI + GL 绘制节点形状（圆 / 方 / 多边形等）与连线（直线 / 贝塞尔 / 折线），仅在 `Repaint` 期绘制。
@@ -198,7 +204,7 @@ save.Load(json);
 
 ## 连线 Shader `NodeTree/NodeLineFlow`
 
-URP 透明**流光连线** Shader：主纹理 + 流动纹理 UV 滚动、边缘渐变（`_EdgeFade`）、辉光（`_Glow`）、全局透明度（`_Alpha`）、流光颜色（HDR）。把使用此 Shader 的材质配到某节点类型的 `LineTypeData.material`，即可让该类型的连线呈现动态流光。
+URP 透明**流光连线** Shader：主纹理 + 流动纹理 UV 滚动、边缘渐变（`_EdgeFade`）、辉光（`_Glow`）、全局透明度（`_Alpha`）、流光颜色（HDR）。把使用此 Shader 的材质配到某节点类型的 `LineTypeData.material`，即可让**连向该类型（子）节点**的连线呈现动态流光。
 
 ---
 

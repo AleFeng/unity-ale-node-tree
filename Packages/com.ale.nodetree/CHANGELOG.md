@@ -6,6 +6,39 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.2.0] - 2026-08-03
+
+视口裁剪修复 + 编辑器视口 UX + 全工程 Bug/优化清理。
+
+### 新增
+
+- **编辑器视口 UX**：画布底部常驻**操作说明栏**（黑底白字）；**滚轮改为以光标为中心缩放**（画布平移改由鼠标中键拖拽）；画布空白处**右键菜单** —— 重置视口 / 显示全部节点（缩放至框住全部）/ 定位到起始节点 / 在此处新建节点（落在光标处，可 Undo）/ 自动布局 / 吸附网格开关。
+
+### 变更
+
+- ⚠ **连线样式归属改为「子节点类型」**：每条连线（含箭头）现采用其**目标（子）节点类型**的 `LineTypeData`（线型 / 线宽 / 材质 / 颜色），与字段 Tooltip「从父节点连向此类型节点」一致；编辑器与运行时统一。此前按**父**节点类型绘制，依赖旧行为的项目视觉会变化，需在各节点类型上重新配置 `line`。
+
+### 修复
+
+- **编辑器画布视口裁剪**：GL 绘制经 `GL.Viewport` 建立硬件裁剪（按 DPI 换算、绘制后复原），节点形状 / 连线 / 箭头 / 预览线在视口边缘**像素级裁切**；移除会扭曲曲线 / 折线的端点预裁剪，改为不改端点的包围盒粗剔除。修复此前「节点整块显隐、连线被裁时位置与形状改变」。
+- **运行时空安全**：`InitPools` / `InitLineMeshRenderers` / `SpawnNode` / `RefreshVisibility` 跳过 null 节点类型 / 空 `typeName` / 空 `nodeTypeRef` / 空 `nodeId` 与重复 `nodeId`，坏配置只被跳过、不再中断 `InitTree`；`NodeTreeData.GetRootNodes` / `GetParentId` / `EnsureBuiltin*` 补 null 守护。
+- **运行时视口裁剪坐标与缩放**：改用容器 `TransformPoint` → 按 Canvas 渲染模式投影屏幕，兼容 `CanvasScaler` `scaleFactor ≠ 1` 与 Screen Space-Camera（旧法误差随距离放大）；以节点**包围盒**判定而非仅中心；spawn / despawn 加**滞回**边距消除边界抖动；缩放画布（`localScale`）也触发重算。
+- **运行时销毁泄漏**：`OnDestroy` 归还全部激活节点克隆（清除 `ToolkitPool.Links` 静态引用）、销毁 `NodeContainer` / `LineContainer` 与各对象池 GameObject，覆盖 `nodeTreeRoot` 挂在组件之外（ScrollView-Content 用法）时的孤儿克隆与残留层级。
+- **编辑器接线生命周期**：删除 / 切除节点时清理所有父节点 `childNodeIds` 中的悬空引用，并清除所有节点 `Unlock` 条件中指向已删节点的 `NodeTree.NodeFinished` 项（避免被提升子节点永久锁死），提升的子节点重接到祖父保持解锁链；断线时的条件删除改由「自动写入 Unlock 条件」开关门控，避免误删手工条件。
+- **编辑器自动布局与连线环检测**：`LayoutSubtree` 增 visited 集合，修复回边导致的 StackOverflow，并令多父钻石节点只布局一次；`AddConnection` 增环检测（目标可达起点则拒绝并提示）。
+- **编辑器状态与脏标记健壮性**：切换 / 加载配置时清理残留选中；节点类型 / 标签 `ReorderableList` 删除按钮加 `index` 越界守护；删除节点类型时置空引用它的节点 `nodeTypeRef` 并告警；撤销 / 重做保留条件折叠态并清理已失效选中，一帧内的编辑合并为一次 Ctrl+Z；标签重命名等**计数中性**变化也正确落盘。
+
+### 优化
+
+- **运行时连线 Mesh 分配**：`NodeLineBuilder` 改用静态复用 scratch 缓冲（顶点 / UV / 索引、曲线采样与折线路径 grow-only 数组），退化段（重合 / 自环）跳过；`RebuildAllLineMeshes` 复用分组字典与列表。
+- **编辑器每帧分配**：连线绘制复用顶点 / UV / 索引 / 颜色缓冲；节点拖拽跳过重名重扫（免每帧 `Dictionary` / `HashSet`）；标签条件行复用 `GUIContent`。
+
+### API
+
+- `NodeData.RebuildTagRules(NodeTreeData)` 由 `void` 改为返回 `bool`（本次同步是否改变了 `tagRules`）；旧调用忽略返回值即可，向后兼容。
+
+> 说明：`autoRefresh` 标签的**空条件视为通过**（fail-open）—— 起始 / 根节点据此自动解锁属预期；非根节点若漏配 `Unlock` 条件会自动挂标签，属配置错误的可接受折衷，请为非根节点显式配置解锁条件。
+
 ## [1.1.0] - 2026-07-29
 
 节点类型「自定义属性字段」：以 `com.ale.toolkit` 的 `AttributeValue` 属性体系取代原有的节点自定义键值数据。
