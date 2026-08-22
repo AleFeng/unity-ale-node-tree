@@ -5,6 +5,7 @@ using UnityEngine;
 using Ale.NodeTree.Runtime;
 using Ale.Toolkit.Runtime;
 using Ale.Toolkit.Editor;
+using Ale.Condition;
 
 namespace Ale.NodeTree.Editor
 {
@@ -41,10 +42,16 @@ namespace Ale.NodeTree.Editor
         private readonly HashSet<string> _multiAttrUnion = new HashSet<string>();                 // 并集暂存（复用，避免每帧分配）
         private static readonly List<AnimationCurve> CurveScratch = new List<AnimationCurve>();   // 曲线深拷贝暂存
 
+        // ── 状态标签条件 ──
+        private readonly List<string> _snapTagRuleNames = new List<string>(); // 代表节点的标签名（Layout 快照，决定条件行数量）
+        private string _pendingApplyTagName;                                  // 本帧点了「应用到全部选中」的标签，延后到桥写回后执行
+
         // ── 缓存的 GUIStyle / GUIContent（避免每次 OnGUI 重新分配）──
         private GUIStyle   _multiCountStyle; // 标题行右上角选中计数
         private GUIStyle   _multiWarnStyle;  // 提示占位行
         private GUIContent _multiPosLabel;   // 画布坐标标签（含分轴对齐说明）
+        private GUIContent _multiTagLabel;   // 标签条件行标签（复用，避免每标签每帧 new）
+        private GUIContent _applyTagLabel;   // 「应用到全部选中」按钮
 
         /// <summary>
         /// Layout 事件时快照批量面板所依赖的全部状态。
@@ -65,6 +72,23 @@ namespace Ale.NodeTree.Editor
             _snapMissingSelected = _snapSelectedOrder.Count - _snapMultiNodes.Count;
 
             SnapshotCommonAttributes();
+            SnapshotTagRules();
+        }
+
+        /// <summary>
+        /// 快照代表节点的标签规则名（Layout 时调用）—— 条件行的数量由它决定。
+        /// 标签词表是全局的，各节点的 <c>tagRules</c> 由 <c>RebuildTagRules</c> 同步为同一套，
+        /// 故取代表节点的一份即可代表全体。
+        /// </summary>
+        private void SnapshotTagRules()
+        {
+            _snapTagRuleNames.Clear();
+            if (!_config || _snapMultiNodes.Count == 0) return;
+
+            var head = _snapMultiNodes[0];
+            if (head.RebuildTagRules(_config)) MarkDirty();
+            foreach (var rule in head.tagRules)
+                if (rule != null) _snapTagRuleNames.Add(rule.tagName);
         }
 
         /// <summary>
@@ -282,6 +306,11 @@ namespace Ale.NodeTree.Editor
 
             EditorGUILayout.Space(8f);
 
+            // ── 状态标签条件 ──
+            DrawMultiTagRules();
+
+            EditorGUILayout.Space(8f);
+
             // ── UI 设置 ──
             EditorGUILayout.LabelField("UI设置", EditorStyles.boldLabel);
             EditorGUI.showMixedValue = mixedIcon;
@@ -360,6 +389,104 @@ namespace Ale.NodeTree.Editor
             EditorGUILayout.Space(8f);
 
             Undo.CollapseUndoOperations(undoGroup);
+        }
+
+        /// <summary>
+        /// 绘制代表节点的「状态标签条件」，每条下方附一个「应用到全部选中」按钮。
+        /// <para>与其它字段不同，条件<b>不随编辑自动传播</b> —— 它通常逐节点特定
+        /// （如「前置节点 A 已完成」），自动写入会静默毁掉各节点各自的解锁规则；
+        /// 只有显式点按钮才复制到其余选中节点。</para>
+        /// <para>条件本体经 <c>ConfigSo</c> 这座 SerializedObject 桥编辑（Toolkit 的
+        /// ConditionExpression 内联绘制器是 PropertyDrawer，必须要 SerializedProperty）。</para>
+        /// </summary>
+        private void DrawMultiTagRules()
+        {
+            EditorGUILayout.LabelField("状态标签条件（显示 [0]，不自动传播）", EditorStyles.boldLabel);
+
+            if (_snapTagRuleNames.Count == 0)
+            {
+                EditorGUILayout.LabelField("（未定义任何标签。可在左侧「标签」面板添加。）",
+                    EditorStyles.centeredGreyMiniLabel);
+                return;
+            }
+
+            var so = ConfigSo;
+            if (so == null) return;
+            so.Update();
+
+            var head      = _snapMultiNodes[0];
+            int headIdx   = _config.nodes.IndexOf(head); // O(n)，每帧只调一次
+            var nodesProp = so.FindProperty("nodes");
+            if (headIdx < 0 || nodesProp == null || headIdx >= nodesProp.arraySize) return;
+            var tagRulesProp = nodesProp.GetArrayElementAtIndex(headIdx).FindPropertyRelative("tagRules");
+            if (tagRulesProp == null) return;
+
+            _multiTagLabel ??= new GUIContent();
+            _applyTagLabel ??= new GUIContent("↑ 应用到全部选中",
+                "把上方这条标签条件复制到其余全部选中节点，覆盖它们该标签的原有条件。\n" +
+                "条件通常逐节点特定，故不会随编辑自动传播，只在点此按钮时应用。");
+
+            for (int j = 0; j < _snapTagRuleNames.Count && j < tagRulesProp.arraySize; j++)
+            {
+                var condProp = tagRulesProp.GetArrayElementAtIndex(j).FindPropertyRelative("condition");
+                if (condProp == null) continue;
+
+                string tagName  = _snapTagRuleNames[j];
+                var    meta     = FindTag(tagName);
+                string autoHint = meta != null && meta.autoRefresh ? " (自动)" : "";
+                _multiTagLabel.text = $"标签「{tagName}」{autoHint}";
+                EditorGUILayout.PropertyField(condProp, _multiTagLabel, true);
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    GUILayout.FlexibleSpace();
+                    using (new EditorGUI.DisabledScope(_snapMultiNodes.Count < 2))
+                    {
+                        // 只登记待办，实际写入延后到 ApplyModifiedProperties 之后（见下）
+                        if (GUILayout.Button(_applyTagLabel, EditorStyles.miniButton, GUILayout.Width(122f)))
+                            _pendingApplyTagName = tagName;
+                    }
+                }
+                EditorGUILayout.Space(4f);
+            }
+
+            so.ApplyModifiedProperties();
+
+            // 按钮触发的批量应用必须放在桥写回之后：否则 ApplyModifiedProperties 会用本帧
+            // Update() 时读到的旧值，把刚刚直接写入 POCO 的条件覆盖回去。
+            if (_pendingApplyTagName != null)
+            {
+                string tagName = _pendingApplyTagName;
+                _pendingApplyTagName = null;
+                ApplyTagConditionToAll(tagName);
+            }
+        }
+
+        /// <summary>
+        /// 把代表节点上指定标签的条件复制到其余全部选中节点（覆盖其原有条件）。
+        /// 用 <see cref="ConditionExpression.Clone"/> 深拷贝（表达式 → 分组 → 条件项 → 参数逐层复制），
+        /// 每个节点各持一份独立实例，之后单独编辑互不影响。
+        /// </summary>
+        private void ApplyTagConditionToAll(string tagName)
+        {
+            if (!_config || _snapMultiNodes.Count < 2 || string.IsNullOrEmpty(tagName)) return;
+
+            var srcRule = _snapMultiNodes[0].GetTagRule(tagName);
+            if (srcRule?.condition == null) return;
+
+            Undo.RecordObject(_config, "应用标签条件到全部选中");
+            for (int i = 1; i < _snapMultiNodes.Count; i++)
+            {
+                var node = _snapMultiNodes[i];
+                node.RebuildTagRules(_config); // 惰性同步：确保该节点确实有这条标签规则
+                var dstRule = node.GetTagRule(tagName);
+                if (dstRule != null) dstRule.condition = srcRule.condition.Clone();
+            }
+            MarkDirty();
+
+            // 直接改了 POCO，桥中的副本已过期，立即重读避免下一帧写回旧值
+            ConfigSo?.Update();
+            Repaint();
         }
 
         /// <summary>
