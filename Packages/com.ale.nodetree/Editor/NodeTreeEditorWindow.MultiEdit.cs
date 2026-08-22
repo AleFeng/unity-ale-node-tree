@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using Ale.NodeTree.Runtime;
+using Ale.Toolkit.Runtime;
+using Ale.Toolkit.Editor;
 
 namespace Ale.NodeTree.Editor
 {
@@ -32,6 +34,13 @@ namespace Ale.NodeTree.Editor
         private readonly List<NodeData> _snapMultiNodes    = new List<NodeData>(); // 上表中仍存在于配置的节点实体
         private int _snapMissingSelected;                                          // 二者之差：已失效的选中项数量
 
+        // ── 自定义属性交集快照（决定字段区控件数量，必须在 Layout 时算好）──
+        private readonly List<string>         _snapCommonAttrIds    = new List<string>();         // 全部选中节点共有的属性 id
+        private readonly List<AttributeValue> _snapCommonAttrValues = new List<AttributeValue>(); // 与上表一一对应的代表节点属性值实例
+        private int _snapExcludedAttrCount;                                                       // 因节点类型不同而被排除的属性数
+        private readonly HashSet<string> _multiAttrUnion = new HashSet<string>();                 // 并集暂存（复用，避免每帧分配）
+        private static readonly List<AnimationCurve> CurveScratch = new List<AnimationCurve>();   // 曲线深拷贝暂存
+
         // ── 缓存的 GUIStyle / GUIContent（避免每次 OnGUI 重新分配）──
         private GUIStyle   _multiCountStyle; // 标题行右上角选中计数
         private GUIStyle   _multiWarnStyle;  // 提示占位行
@@ -54,6 +63,76 @@ namespace Ale.NodeTree.Editor
                 if (node != null) _snapMultiNodes.Add(node);
             }
             _snapMissingSelected = _snapSelectedOrder.Count - _snapMultiNodes.Count;
+
+            SnapshotCommonAttributes();
+        }
+
+        /// <summary>
+        /// 计算「全部选中节点共有的自定义属性」并快照（Layout 时调用）。
+        /// 属性 schema 来自各节点 <c>nodeTypeRef</c> 对应的 <see cref="NodeTypeData.attributes"/>；
+        /// 判同标准与 <c>AttributeSync</c> 内部一致 —— id 相同且 (type, isArray, 枚举类型) 一致才算同一字段，
+        /// 该谓词在 toolkit 内为 private，此处按同一规则本地复刻。
+        /// </summary>
+        private void SnapshotCommonAttributes()
+        {
+            _snapCommonAttrIds.Clear();
+            _snapCommonAttrValues.Clear();
+            _multiAttrUnion.Clear();
+            _snapExcludedAttrCount = 0;
+            if (!_config || _snapMultiNodes.Count < 2) return;
+
+            // 并集：仅用于报告「有多少字段因类型不同而未显示」
+            foreach (var node in _snapMultiNodes)
+            {
+                var t = _config.GetNodeType(node.nodeTypeRef);
+                if (t?.attributes == null) continue;
+                foreach (var d in t.attributes)
+                    if (d != null && !string.IsNullOrEmpty(d.id)) _multiAttrUnion.Add(d.id);
+            }
+
+            // 只对代表节点做 schema 同步：AttributeSync.Sync 每次分配 Dictionary + HashSet，
+            // 叠加 wantsMouseMove 的高频重绘，N 个节点每帧同步是实打实的 GC 压力；
+            // 其余节点在真正发生传播时才惰性同步。
+            var head = _snapMultiNodes[0];
+            int beforeCount = head.attributeValues.Count;
+            head.RebuildAttributes(_config);
+            if (head.attributeValues.Count != beforeCount) MarkDirty();
+
+            var headDefs = _config.GetNodeType(head.nodeTypeRef)?.attributes;
+            if (headDefs == null) return;
+
+            foreach (var def in headDefs)
+            {
+                if (def == null || string.IsNullOrEmpty(def.id)) continue;
+
+                bool common = true;
+                for (int i = 1; i < _snapMultiNodes.Count && common; i++)
+                {
+                    var defs = _config.GetNodeType(_snapMultiNodes[i].nodeTypeRef)?.attributes;
+                    common = defs != null && HasSameShapeDef(defs, def);
+                }
+                if (!common) continue;
+
+                var entry = head.GetEntry(def.id);
+                if (entry?.value == null) continue; // RebuildAttributes 之后理论上不会发生
+                _snapCommonAttrIds.Add(def.id);
+                _snapCommonAttrValues.Add(entry.value);
+            }
+            _snapExcludedAttrCount = Mathf.Max(0, _multiAttrUnion.Count - _snapCommonAttrIds.Count);
+        }
+
+        /// <summary>defs 中是否存在与 target 同 id 且形态（类型 / 数组 / 枚举类型）完全一致的定义。</summary>
+        private static bool HasSameShapeDef(List<AttributeDefinition> defs, AttributeDefinition target)
+        {
+            foreach (var d in defs)
+            {
+                if (d == null || d.id != target.id) continue;
+                if (d.type != target.type || d.isArray != target.isArray) return false;
+                if ((d.type == EFieldType.Enum || d.type == EFieldType.EnumIntPair)
+                    && d.enumTypeRef != target.enumTypeRef) return false;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -219,6 +298,16 @@ namespace Ale.NodeTree.Editor
 
             EditorGUILayout.Space(4f);
 
+            // ── 节点名称 / 描述（AttributeValue.Text）──
+            // AttributeFieldDrawer 无多目标能力，故只绘制代表节点 [0] 的实例（不显示「多值」），
+            // 检测到改动后再原地覆写其余选中节点的对应值。
+            EditorGUILayout.LabelField("文本（显示 [0] 的值，改动即写入全部选中）", EditorStyles.miniBoldLabel);
+            DrawMultiTextAttr("节点名称", true);
+            EditorGUILayout.Space(2f);
+            DrawMultiTextAttr("节点描述", false);
+
+            EditorGUILayout.Space(4f);
+
             // ── 画布坐标 ──
             // 拆成两个独立 FloatField，不能用 Vector2Field：后者只有一个 showMixedValue，
             // 且整体回写 Vector2 —— 用户只改 Y 时会把 X 的显示值当作真值一并写回，静默篡改 N 个节点的 X。
@@ -254,7 +343,94 @@ namespace Ale.NodeTree.Editor
 
             EditorGUILayout.Space(8f);
 
+            // ── 自定义属性（全部选中节点类型 schema 的交集）──
+            EditorGUILayout.LabelField("自定义属性（共有字段）", EditorStyles.boldLabel);
+            for (int i = 0; i < _snapCommonAttrIds.Count; i++)
+                DrawMultiCustomAttr(i);
+
+            // 恒定占位行：三种文案共用同一个控件，控件数量不随内容变化
+            GUILayout.Label(
+                _snapExcludedAttrCount > 0
+                    ? $"（另有 {_snapExcludedAttrCount} 个字段因所选节点的类型不同而未显示）"
+                    : _snapCommonAttrIds.Count == 0
+                        ? "（所选节点的类型未定义属性字段）"
+                        : "",
+                EditorStyles.centeredGreyMiniLabel);
+
+            EditorGUILayout.Space(8f);
+
             Undo.CollapseUndoOperations(undoGroup);
+        }
+
+        /// <summary>
+        /// 绘制代表节点的 <c>nodeName</c> / <c>nodeDesc</c>，改动后传播到其余选中节点。
+        /// 改动信号取 <c>AttrCtx.DirtyTick</c> 与 BeginChangeCheck 的并集，而<b>不是</b> JSON 前后比对：
+        /// <see cref="AttributeFieldDrawer"/> 会对空值调用 EnsureCount 补一个元素，
+        /// 而 nodeName / nodeDesc 的初值恰为空 —— JSON 比对会在首帧误判「已改动」，
+        /// 把代表节点的值静默覆盖到其余全部选中节点。
+        /// </summary>
+        private void DrawMultiTextAttr(string label, bool isName)
+        {
+            var head = _snapMultiNodes[0];
+            var src  = isName ? head.nodeName : head.nodeDesc;
+
+            int tick = AttrCtx.DirtyTick;
+            EditorGUI.BeginChangeCheck();
+            AttributeFieldDrawer.Draw(AttrCtx, label, src, null);
+            if (!EditorGUI.EndChangeCheck() && AttrCtx.DirtyTick == tick) return;
+
+            for (int i = 1; i < _snapMultiNodes.Count; i++)
+            {
+                var n = _snapMultiNodes[i];
+                CopyAttrValue(src, isName ? n.nodeName : n.nodeDesc);
+            }
+            MarkDirty();
+        }
+
+        /// <summary>
+        /// 绘制交集中第 <paramref name="index"/> 个自定义属性（取代表节点的值），改动后传播到其余选中节点。
+        /// 其余节点在此刻才做 schema 同步（惰性），避免每帧为 N 个节点重复分配同步用的临时集合。
+        /// </summary>
+        private void DrawMultiCustomAttr(int index)
+        {
+            string attrId = _snapCommonAttrIds[index];
+            var    src    = _snapCommonAttrValues[index];
+
+            int tick = AttrCtx.DirtyTick;
+            EditorGUI.BeginChangeCheck();
+            AttributeFieldDrawer.Draw(AttrCtx, attrId, src, null);
+            if (!EditorGUI.EndChangeCheck() && AttrCtx.DirtyTick == tick) return;
+
+            for (int i = 1; i < _snapMultiNodes.Count; i++)
+            {
+                var other = _snapMultiNodes[i];
+                other.RebuildAttributes(_config);
+                var entry = other.GetEntry(attrId);
+                if (entry != null) CopyAttrValue(src, entry.value);
+            }
+            MarkDirty();
+        }
+
+        /// <summary>
+        /// 用 <paramref name="src"/> 的原始后备数据<b>原地覆写</b> <paramref name="dst"/>。
+        /// 必须原地覆写而不是替换实例：<see cref="AttributeFieldDrawer"/> 按 AttributeValue 的
+        /// 实例身份缓存本地化 Holder 与拖拽状态，换实例会造成缓存泄漏与错配。
+        /// 曲线需额外深拷贝 —— <c>SetRaw</c> 对列表是逐元素浅拷贝，直接传入会让多个节点
+        /// 共用同一条 <see cref="AnimationCurve"/>，之后改一个即改全部。
+        /// </summary>
+        private static void CopyAttrValue(AttributeValue src, AttributeValue dst)
+        {
+            if (src == null || dst == null || ReferenceEquals(src, dst)) return;
+
+            var srcCurves = src.RawCurves;
+            CurveScratch.Clear();
+            for (int i = 0; i < srcCurves.Count; i++)
+                CurveScratch.Add(srcCurves[i] != null ? new AnimationCurve(srcCurves[i].keys) : new AnimationCurve());
+
+            dst.SetRaw(src.Type, src.IsArray, src.EnumTypeRef,
+                       src.RawInts, src.RawFloats, src.RawStrings, src.RawObjects,
+                       CurveScratch, src.RawObjAddresses);
+            CurveScratch.Clear(); // 不长期持有曲线引用
         }
 
         /// <summary>

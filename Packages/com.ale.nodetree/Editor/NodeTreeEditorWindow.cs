@@ -293,12 +293,24 @@ namespace Ale.NodeTree.Editor
             public SerializedObject  Serialized => null;
             public IAssetRefResolver Resolver   => null;
 
+            /// <summary>
+            /// 标脏计数：每次 <see cref="MarkDirty"/> 递增。
+            /// 批量编辑面板据此判定 <see cref="AttributeFieldDrawer"/> 内部是否真的改动了值：
+            /// 该绘制器的普通编辑、数组增删、Ctrl+C/V 与右键粘贴全部经由 MarkDirty，
+            /// 而它对空值的 EnsureCount 补位不经过，故不会被误判为「已改动」。
+            /// </summary>
+            public int DirtyTick { get; private set; }
+
             public void RecordUndo(string actionName)
             {
                 if (_owner._config) Undo.RecordObject(_owner._config, actionName);
             }
-            public void MarkDirty() => _owner.MarkDirty();
-            public void Repaint()   => _owner.Repaint();
+            public void MarkDirty()
+            {
+                DirtyTick++;
+                _owner.MarkDirty();
+            }
+            public void Repaint() => _owner.Repaint();
         }
         
         /// <summary>
