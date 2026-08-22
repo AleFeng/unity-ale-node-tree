@@ -163,21 +163,21 @@ namespace Ale.NodeTree.Editor
                 _configSo.Update();
             else
                 _configSo = null;
-            // 撤销/重做后选中节点可能已不存在（如 ID 改名被回滚），清理避免右侧面板陈旧空白
-            if (!string.IsNullOrEmpty(_canvas.SelectedNodeId) && _config.GetNode(_canvas.SelectedNodeId) == null)
-                _canvas.SelectedNodeId = null;
+            // 撤销/重做后选中节点可能已不存在（如 ID 改名被回滚），逐个剔除避免右侧面板陈旧空白
+            _canvas.PruneSelection(_config);
             RebuildLists(); // 同时会将 _needDuplicateCheck 置 true
             Repaint();
         }
 
         /// <summary>
-        /// 切换/加载配置后，清理指向旧配置实体的残留选中/悬停/连线状态，
+        /// 切换/加载配置后，清理指向旧配置实体的残留选中/悬停/连线/拖拽状态，
         /// 避免右侧面板与画布显示陈旧内容（Draw 路径已能容错，但不清理会显示旧选中直到用户点击）。
         /// </summary>
         private void ResetSelectionState()
         {
             _selectedNodeTypeIdx   = -1;
             _canvas.SelectedNodeId = null;
+            _canvas.IsDraggingNode = false; // 配置切换可能发生在拖拽手势中途，不清会残留拖拽态
             _selectedConnFrom      = null;
             _selectedConnTo        = null;
             _hoveredNodeId         = null;
@@ -1792,8 +1792,8 @@ namespace Ale.NodeTree.Editor
                 foreach (var childId in promoted)
                     AddUnlockFinishedItem(_config.GetNode(childId), parentId);
 
-            if (_canvas.SelectedNodeId == nodeId)
-                _canvas.SelectedNodeId = null;
+            // 已删除的节点从选中集移除（多选下不得波及其余选中项）
+            _canvas.RemoveFromSelection(nodeId);
 
             MarkDirty();
         }
@@ -1835,8 +1835,9 @@ namespace Ale.NodeTree.Editor
                 foreach (var deletedId in toDelete)
                     RemoveUnlockFinishedItem(n, deletedId);
 
-            if (toDelete.Contains(_canvas.SelectedNodeId))
-                _canvas.SelectedNodeId = null;
+            // 被切除的节点逐个从选中集移除（多选下不得波及子树外的选中项）
+            foreach (var deletedId in toDelete)
+                _canvas.RemoveFromSelection(deletedId);
 
             MarkDirty();
         }
