@@ -33,6 +33,10 @@ namespace Ale.NodeTree.Runtime
                  "这是最简单直接的刷新方式；也可关闭后由业务在合适时机手动调用 RefreshAllNodeStates()。")]
         [SerializeField] private bool refreshStatesOnInit = true;
 
+        [Tooltip("【测试用】全部解锁：InitTree 时为每个节点直接挂 Unlock 标签（绕过条件判定），\n" +
+                 "便于查看整棵树的完整结构。标签只增不改存档数据本身；发布前应保持关闭。")]
+        [SerializeField] private bool unlockAllForTest;
+
         /// <summary>
         /// 将编辑器画布坐标系下的节点位置整体偏移到 nodeTreeRoot 局部坐标系。
         /// 由 CalcAndSetRootSize() 计算，使最顶/最左节点的边缘紧贴内边距。
@@ -142,6 +146,14 @@ namespace Ale.NodeTree.Runtime
             InitLineMeshRenderers();
             _lineMeshDirty   = true;
             _visibilityDirty = true; // 强制下一帧刷新一次可见性
+
+            // 【测试用】全部解锁：绕过条件为每个节点直接挂 Unlock 标签。
+            // 放在状态刷新之前，链式条件（NodeUnlocked 等）能立即看到这些标签。
+            if (unlockAllForTest)
+            {
+                foreach (var node in config.nodes)
+                    NodeTreeSaveDataManager.Instance.AddTag(node.nodeId, NodeTreeTags.Unlock);
+            }
 
             // 打开时刷新所有节点的自动状态标签（最简单直接的刷新方式）
             if (refreshStatesOnInit)
