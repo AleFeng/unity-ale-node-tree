@@ -88,7 +88,7 @@ MonoBehaviour:
   scrollRect: {fileID: 5325539929615141235}
   image: {fileID: 5412455315607853261}
   viewportMode: 1
-  speedMultiplier: 1
+  speedMultiplier: {x: 1, y: 1}
 --- !u!1 &1550333859416226849
 GameObject:
   m_ObjectHideFlags: 0

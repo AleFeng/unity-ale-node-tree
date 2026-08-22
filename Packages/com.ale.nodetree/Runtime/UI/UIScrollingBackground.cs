@@ -22,7 +22,7 @@ namespace Ale.NodeTree.Runtime
     ///    滚动时仅偏移 uvRect，靠纹理 Repeat 采样实现四方连续无限平铺——
     ///    单物体单 DrawCall、零 tile 实例、零逐帧分配；
     ///  - 可选绑定 ScrollRect：LateUpdate 轮询 Content.anchoredPosition 增量，
-    ///    与 Content 同向滚动，speedMultiplier 控制倍速（≠1 时形成视差）；
+    ///    与 Content 同向滚动，speedMultiplier 按 X / Y 分轴控制倍速（≠1 视差、负值反向）；
     ///  - 未绑定时可经 ScrollBy / SetScrollOffset 等公开 API 手动驱动。
     /// 注意：
     ///  - 纹理导入的 Wrap Mode 必须为 Repeat（Awake 会检测并告警）；
@@ -46,9 +46,9 @@ namespace Ale.NodeTree.Runtime
         [SerializeField] private EViewportMode viewportMode = EViewportMode.SelfRect;
 
         [Header("滚动")]
-        [Tooltip("滚动速度倍率：1 = 与 Content 同速；<1 远景视差；>1 近景视差；0 = 静止；负值反向。\n" +
+        [Tooltip("X / Y 分轴滚动速度倍率：1 = 与 Content 同速；<1 远景视差；>1 近景视差；0 = 该轴静止；负值 = 该轴反向。\n" +
                  "仅作用于 ScrollRect 跟随路径，手动 ScrollBy 不乘倍率。")]
-        [SerializeField] private float speedMultiplier = 1f;
+        [SerializeField] private Vector2 speedMultiplier = Vector2.one;
 
         // tile 尺寸（画布单位）：必须在任何 Refit 改动 RawImage 尺寸之前捕获
         private Vector2 _tileSize;
@@ -70,8 +70,8 @@ namespace Ale.NodeTree.Runtime
 
         #region 公开接口
 
-        /// <summary>滚动速度倍率（仅作用于 ScrollRect 跟随路径；1 同速、≠1 视差、负值反向）。</summary>
-        public float SpeedMultiplier
+        /// <summary>X / Y 分轴滚动速度倍率（仅作用于 ScrollRect 跟随路径；1 同速、≠1 视差、0 该轴静止、负值该轴反向）。</summary>
+        public Vector2 SpeedMultiplier
         {
             get => speedMultiplier;
             set => speedMultiplier = value;
@@ -232,7 +232,7 @@ namespace Ale.NodeTree.Runtime
             }
             if (pos != _lastContentPos)
             {
-                ApplyVisualDelta((pos - _lastContentPos) * speedMultiplier);
+                ApplyVisualDelta(Vector2.Scale(pos - _lastContentPos, speedMultiplier));
                 _lastContentPos = pos;
             }
         }

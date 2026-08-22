@@ -61,7 +61,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 | High-performance runtime UI | Object pooling per node type (via `com.ale.toolkit`), on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls. |
 | URP flowing lines | `NodeTree/NodeLineFlow` transparent flow shader (flow texture / edge fade / glow / HDR color); each connection (with its arrow) takes the line style of its child (target) node type. |
 | Save-friendly | `NodeTreeSaveDataManager` tracks each node's tags, JSON serialization, `Get()` / `Set()` / `Save()` / `Load()` for external saves. |
-| Infinite scrolling background | `UIScrollingBackground` — four-way seamless infinite-scrolling background: RawImage uvRect UV scrolling (texture must be Repeat), optional ScrollRect binding following the Content in the same direction, speed-multiplier parallax, SelfRect / Screen viewport auto-fit, and a public API for manual driving. |
+| Infinite scrolling background | `UIScrollingBackground` — four-way seamless infinite-scrolling background: RawImage uvRect UV scrolling (texture must be Repeat), optional ScrollRect binding following the Content in the same direction, per-axis (X / Y) speed-multiplier parallax (negative = reverse), SelfRect / Screen viewport auto-fit, and a public API for manual driving. |
 | Base-package integration | Node name / description localization via `com.ale.toolkit`'s `AttributeValue`(Text) (multilingual when `ATK_LOCALIZATION` is on, else plain text); hover popup fade via `com.ale.toolkit`'s central tween; object pooling via `com.ale.toolkit`. The plugin itself has no localization / DOTween macro. |
 
 ### Modules

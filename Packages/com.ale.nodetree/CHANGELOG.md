@@ -12,7 +12,7 @@
 
 ### 新增
 
-- **四方连续无限滚动背景 `UIScrollingBackground`**：以 RawImage **初始 Rect 尺寸**为一块 tile（≤0 时回退纹理像素尺寸），`uvRect.size = 视口/tile` 铺满视口，滚动仅偏移 `uvRect`、靠纹理 **Repeat** 采样实现四方连续无限平铺——单物体单 DrawCall、零 tile 实例、零逐帧分配（静止时零开销）。可选绑定 `ScrollRect`：`LateUpdate` 轮询 `Content.anchoredPosition` 增量、与 Content **同向**滚动（统一覆盖拖拽 / 惯性 / 回弹 / 代码驱动，首帧与重绑定只快照不回放、无跳变）；`speedMultiplier` 速度倍率（1 = 同速，≠1 视差，负值反向）。视口模式 `SelfRect`（自身 RectTransform，image 为子物体时自动拉伸铺满）/ `Screen`（按根 `Canvas.scaleFactor` 换算画布单位并轮询分辨率变化）。纹理 Wrap 非 Repeat 时 Awake 检测并告警；未绑定 ScrollRect 时可经公开 API 手动驱动。
+- **四方连续无限滚动背景 `UIScrollingBackground`**：以 RawImage **初始 Rect 尺寸**为一块 tile（≤0 时回退纹理像素尺寸），`uvRect.size = 视口/tile` 铺满视口，滚动仅偏移 `uvRect`、靠纹理 **Repeat** 采样实现四方连续无限平铺——单物体单 DrawCall、零 tile 实例、零逐帧分配（静止时零开销）。可选绑定 `ScrollRect`：`LateUpdate` 轮询 `Content.anchoredPosition` 增量、与 Content **同向**滚动（统一覆盖拖拽 / 惯性 / 回弹 / 代码驱动，首帧与重绑定只快照不回放、无跳变）；`speedMultiplier` X / Y 分轴速度倍率（`Vector2`：1 = 同速，≠1 视差，0 该轴静止，负值该轴反向）。视口模式 `SelfRect`（自身 RectTransform，image 为子物体时自动拉伸铺满）/ `Screen`（按根 `Canvas.scaleFactor` 换算画布单位并轮询分辨率变化）。纹理 Wrap 非 Repeat 时 Awake 检测并告警；未绑定 ScrollRect 时可经公开 API 手动驱动。
 
 ### 变更
 
@@ -20,7 +20,7 @@
 
 ### API
 
-- `UIScrollingBackground`：属性 `SpeedMultiplier` / `ViewportMode` / `TileSize`（只读）/ `ScrollOffset`（只读）；方法 `ScrollBy(Vector2)`（手动视觉增量，不乘倍率）、`SetScrollOffset(Vector2)`、`ResetOffset()`、`SetScrollRect(ScrollRect)`（运行时重绑定，无跳变）、`Refit()`（布局变化后重新适配视口）。
+- `UIScrollingBackground`：属性 `SpeedMultiplier`（`Vector2` 分轴）/ `ViewportMode` / `TileSize`（只读）/ `ScrollOffset`（只读）；方法 `ScrollBy(Vector2)`（手动视觉增量，不乘倍率）、`SetScrollOffset(Vector2)`、`ResetOffset()`、`SetScrollRect(ScrollRect)`（运行时重绑定，无跳变）、`Refit()`（布局变化后重新适配视口）。
 
 ## [1.2.0] - 2026-08-03
 

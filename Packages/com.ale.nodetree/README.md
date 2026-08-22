@@ -188,9 +188,9 @@ save.Load(json);
 | `scrollRect` | 要跟随的 `ScrollRect`（可选）。绑定后在 `LateUpdate` 轮询 `Content.anchoredPosition` 增量、与 Content **同向**滚动（统一覆盖拖拽 / 惯性 / 回弹 / 代码驱动；首帧与重绑定只快照不回放、无跳变）。为空时仅由 API 手动驱动。 |
 | `image` | 平铺显示用的 `RawImage`。为空时自动在自身及子物体（含未激活）上查找；其**初始 Rect 尺寸即 tile 尺寸**（≤0 时回退纹理像素尺寸）。 |
 | `viewportMode` | 视口尺寸来源：`SelfRect` = 本组件 RectTransform（image 为子物体时自动拉伸铺满）；`Screen` = 屏幕尺寸（按根 `Canvas.scaleFactor` 换算画布单位，并轮询分辨率变化自动重适配）。 |
-| `speedMultiplier` | 滚动速度倍率：1 = 与 Content 同速；<1 远景视差；>1 近景视差；0 = 静止；负值反向。仅作用于 ScrollRect 跟随路径。 |
+| `speedMultiplier` | X / Y 分轴滚动速度倍率（`Vector2`）：1 = 与 Content 同速；<1 远景视差；>1 近景视差；0 = 该轴静止；负值 = 该轴反向。仅作用于 ScrollRect 跟随路径。 |
 
-**主要 API**：`ScrollBy(Vector2)`（手动视觉增量，不乘倍率）、`SetScrollOffset(Vector2)` / `ResetOffset()`、`SetScrollRect(ScrollRect)`（运行时重绑定，无跳变）、`Refit()`（布局变化后重新适配视口）；属性 `SpeedMultiplier`、`ViewportMode`、`TileSize`（只读）、`ScrollOffset`（只读）。
+**主要 API**：`ScrollBy(Vector2)`（手动视觉增量，不乘倍率）、`SetScrollOffset(Vector2)` / `ResetOffset()`、`SetScrollRect(ScrollRect)`（运行时重绑定，无跳变）、`Refit()`（布局变化后重新适配视口）；属性 `SpeedMultiplier`（`Vector2` 分轴）、`ViewportMode`、`TileSize`（只读）、`ScrollOffset`（只读）。
 
 > ⚠ 纹理导入设置的 **Wrap Mode 必须为 Repeat**（否则 tile 边缘拉伸 / 截断，组件会在 Awake 告警）；使用 `RawImage` 直接引用 `Texture2D`，不支持图集内 Sprite。演示预制体的 `ImgBackground` 即此用法（绑定 Scroll View、`Screen` 视口、倍率 1）。
 

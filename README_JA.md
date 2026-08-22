@@ -61,7 +61,7 @@ Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラ�
 | 高性能ランタイム UI | ノードタイプ別オブジェクトプール（`com.ale.toolkit` ベース）、ビューポートカリングでオンデマンド Spawn / Despawn、ライン Mesh バッチ化でドローコール削減。 |
 | URP 流光ライン | `NodeTree/NodeLineFlow` 透明流光シェーダー（フローテクスチャ / エッジフェード / グロー / HDR カラー）。各接続線（矢印含む）は子（対象）ノードタイプのライン様式で描画（親からこの子タイプへ向かう線に適用）。 |
 | セーブ連携 | `NodeTreeSaveDataManager` がノードのタグ状態を管理、JSON シリアライズ、`Get()` / `Set()` / `Save()` / `Load()` で外部セーブに接続。 |
-| 無限スクロール背景 | `UIScrollingBackground` —— 四方連続の無限スクロール背景：RawImage uvRect UV スクロール（テクスチャは Repeat 必須）、ScrollRect への任意バインドで Content と同方向に追従、速度倍率パララックス、SelfRect / Screen ビューポート自動適合、公開 API による手動駆動も可能。 |
+| 無限スクロール背景 | `UIScrollingBackground` —— 四方連続の無限スクロール背景：RawImage uvRect UV スクロール（テクスチャは Repeat 必須）、ScrollRect への任意バインドで Content と同方向に追従、X / Y 軸別の速度倍率パララックス（負値で逆方向）、SelfRect / Screen ビューポート自動適合、公開 API による手動駆動も可能。 |
 | 基盤統合 | ノード名 / 説明のローカライズは `com.ale.toolkit` の `AttributeValue`(Text)（`ATK_LOCALIZATION` 有効時は多言語、無効時はプレーンテキスト）。ホバーポップアップのフェードは `com.ale.toolkit` の中央 Tween。オブジェクトプールは `com.ale.toolkit`。プラグイン自体にローカライズ / DOTween マクロは不要。 |
 
 ### モジュール一覧

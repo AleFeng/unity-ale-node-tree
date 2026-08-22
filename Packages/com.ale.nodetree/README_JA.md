@@ -187,9 +187,9 @@ save.Load(json);
 | `scrollRect` | 追従する `ScrollRect`（任意）。バインドすると `LateUpdate` で `Content.anchoredPosition` の増分をポーリングし、Content と**同方向**にスクロール（ドラッグ / 慣性 / 弾性 / コード駆動を一律にカバー。初回フレームと再バインドはスナップショットのみで差分を再生しないためジャンプなし）。null の場合は公開 API での手動駆動のみ。 |
 | `image` | タイリング表示用の `RawImage`。null の場合は自身と子オブジェクト（非アクティブ含む）から自動検索。その**初期 Rect サイズがタイルサイズ**（≤0 の場合はテクスチャのピクセルサイズにフォールバック）。 |
 | `viewportMode` | ビューポートサイズの取得元：`SelfRect` = 本コンポーネントの RectTransform（image が子の場合は自動ストレッチ）；`Screen` = 画面サイズ（ルート `Canvas.scaleFactor` でキャンバス単位へ換算し、解像度変化をポーリングして自動再適合）。 |
-| `speedMultiplier` | スクロール速度倍率：1 = Content と同速；<1 遠景パララックス；>1 近景パララックス；0 = 静止；負値 = 逆方向。ScrollRect 追従パスにのみ適用。 |
+| `speedMultiplier` | X / Y 軸別のスクロール速度倍率（`Vector2`）：1 = Content と同速；<1 遠景パララックス；>1 近景パララックス；0 = その軸は静止；負値 = その軸は逆方向。ScrollRect 追従パスにのみ適用。 |
 
-**主要 API**：`ScrollBy(Vector2)`（手動の視覚増分、倍率は乗算しない）、`SetScrollOffset(Vector2)` / `ResetOffset()`、`SetScrollRect(ScrollRect)`（ランタイム再バインド、ジャンプなし）、`Refit()`（レイアウト変更後の再適合）；プロパティ `SpeedMultiplier`、`ViewportMode`、`TileSize`（読み取り専用）、`ScrollOffset`（読み取り専用）。
+**主要 API**：`ScrollBy(Vector2)`（手動の視覚増分、倍率は乗算しない）、`SetScrollOffset(Vector2)` / `ResetOffset()`、`SetScrollRect(ScrollRect)`（ランタイム再バインド、ジャンプなし）、`Refit()`（レイアウト変更後の再適合）；プロパティ `SpeedMultiplier`（`Vector2` 軸別）、`ViewportMode`、`TileSize`（読み取り専用）、`ScrollOffset`（読み取り専用）。
 
 > ⚠ テクスチャのインポート設定 **Wrap Mode は必ず Repeat**（そうでないとタイル境界で引き伸ばし / クランプが発生。コンポーネントが Awake で警告します）。`RawImage` が `Texture2D` を直接参照するため、アトラス内 Sprite は非対応。デモプレハブの `ImgBackground` が想定どおりの構成例です（Scroll View にバインド、`Screen` ビューポート、倍率 1）。
 
