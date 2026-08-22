@@ -25,7 +25,7 @@
 | **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件** | 接入 Toolkit `Ale.Condition` 与内置判定器 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、`NodeFinishedEvaluator`、`NodeUnlockedEvaluator`、`NodeHasTagEvaluator` |
 | **存档** | 节点状态标签 | `NodeTreeSaveDataManager` |
-| **运行时 UI** | 节点树展示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
+| **运行时 UI** | 节点树展示与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **Shader** | 流光连线 | `NodeTree/NodeLineFlow` |
 
@@ -178,6 +178,21 @@ save.Load(json);
 - `OnPointerEnterNode()` / `OnPointerExitNode()` —— 悬停弹窗淡入 / 淡出。
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` —— 点击回调（可订阅事件，或子类重写触发音效 / 对话 / 剧情等）。
 - `OnSpawn()` / `OnDespawn()` —— `IPoolable` 池回调（`OnDespawn` → 自动 `OnUnbindData`，复用不残留旧状态）。
+
+### `UIScrollingBackground`
+
+四方连续无限滚动背景组件（`RawImage` uvRect UV 滚动）。挂到背景物体上，以 `RawImage` 的**初始 Rect 尺寸**为一块 tile 铺满视口（`uvRect.size = 视口 / tile`），滚动时仅偏移 `uvRect`、靠纹理 **Repeat** 采样实现四方连续无限平铺——单物体单 DrawCall、零 tile 实例、零逐帧分配（静止时零开销）。
+
+| 字段 | 说明 |
+|------|------|
+| `scrollRect` | 要跟随的 `ScrollRect`（可选）。绑定后在 `LateUpdate` 轮询 `Content.anchoredPosition` 增量、与 Content **同向**滚动（统一覆盖拖拽 / 惯性 / 回弹 / 代码驱动；首帧与重绑定只快照不回放、无跳变）。为空时仅由 API 手动驱动。 |
+| `image` | 平铺显示用的 `RawImage`。为空时自动在自身及子物体（含未激活）上查找；其**初始 Rect 尺寸即 tile 尺寸**（≤0 时回退纹理像素尺寸）。 |
+| `viewportMode` | 视口尺寸来源：`SelfRect` = 本组件 RectTransform（image 为子物体时自动拉伸铺满）；`Screen` = 屏幕尺寸（按根 `Canvas.scaleFactor` 换算画布单位，并轮询分辨率变化自动重适配）。 |
+| `speedMultiplier` | 滚动速度倍率：1 = 与 Content 同速；<1 远景视差；>1 近景视差；0 = 静止；负值反向。仅作用于 ScrollRect 跟随路径。 |
+
+**主要 API**：`ScrollBy(Vector2)`（手动视觉增量，不乘倍率）、`SetScrollOffset(Vector2)` / `ResetOffset()`、`SetScrollRect(ScrollRect)`（运行时重绑定，无跳变）、`Refit()`（布局变化后重新适配视口）；属性 `SpeedMultiplier`、`ViewportMode`、`TileSize`（只读）、`ScrollOffset`（只读）。
+
+> ⚠ 纹理导入设置的 **Wrap Mode 必须为 Repeat**（否则 tile 边缘拉伸 / 截断，组件会在 Awake 告警）；使用 `RawImage` 直接引用 `Texture2D`，不支持图集内 Sprite。演示预制体的 `ImgBackground` 即此用法（绑定 Scroll View、`Screen` 视口、倍率 1）。
 
 ### `NodeLineBuilder`
 

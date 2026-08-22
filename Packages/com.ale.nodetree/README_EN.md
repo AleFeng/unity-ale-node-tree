@@ -25,7 +25,7 @@ A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeD
 | **Data** | Node / type / state tags / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `NodeTagData`, `NodeTagRule` |
 | **Conditions** | node-tree condition wiring (into toolkit `Ale.Condition`) | `INodeTreeStateSource`, `NodeTreeConditionContext`, `NodeTreeTags`; evaluators `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
 | **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
-| **Runtime UI** | Node-tree presentation | `UINodeTreeWindow`, `UINodeBase`, `NodeLineBuilder` |
+| **Runtime UI** | Node-tree presentation & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UIScrollingBackground`, `NodeLineBuilder` |
 | **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 | **Shader** | Flowing line | `NodeTree/NodeLineFlow` |
 
@@ -181,6 +181,21 @@ The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach 
 - `OnPointerEnterNode()` / `OnPointerExitNode()` — hover popup fade in / out.
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` — click callback (subscribe to the event, or override in a subclass to trigger SFX / dialogue / story, etc.).
 - `OnSpawn()` / `OnDespawn()` — `IPoolable` pool callbacks (`OnDespawn` → auto `OnUnbindData`, so reused instances carry no stale state).
+
+### `UIScrollingBackground`
+
+A four-way seamless infinite-scrolling background component (`RawImage` uvRect UV scrolling). Attach it to a background object: it treats the `RawImage`'s **initial rect size** as one tile and fills the viewport (`uvRect.size = viewport / tile`); scrolling only offsets `uvRect`, and texture **Repeat** sampling produces seamless infinite tiling in all four directions — one object, one draw call, zero tile instances, zero per-frame allocation (zero cost while static).
+
+| Field | Description |
+|-------|-------------|
+| `scrollRect` | The `ScrollRect` to follow (optional). When bound, `LateUpdate` polls the `Content.anchoredPosition` delta and scrolls the background in the **same direction** as the Content (uniformly covers drag / inertia / elastic / code-driven moves; the first frame and rebinds only snapshot without replaying, so there is no jump). When null, the component is driven only via the public API. |
+| `image` | The `RawImage` used for tiling. When null it is auto-found on the same GameObject or children (including inactive); its **initial rect size is the tile size** (falls back to texture pixel size when ≤ 0). |
+| `viewportMode` | Viewport size source: `SelfRect` = this component's RectTransform (a child image is auto-stretched to fill); `Screen` = screen size (converted to canvas units via the root `Canvas.scaleFactor`, re-fitted automatically on resolution changes). |
+| `speedMultiplier` | Scroll speed multiplier: 1 = same speed as Content; <1 far-layer parallax; >1 near-layer parallax; 0 = static; negative = reverse. Applies only to the ScrollRect-follow path. |
+
+**Main API**: `ScrollBy(Vector2)` (manual visual delta, not multiplied), `SetScrollOffset(Vector2)` / `ResetOffset()`, `SetScrollRect(ScrollRect)` (runtime rebind, no jump), `Refit()` (re-fit the viewport after layout changes); properties `SpeedMultiplier`, `ViewportMode`, `TileSize` (read-only), `ScrollOffset` (read-only).
+
+> ⚠ The texture's import **Wrap Mode must be Repeat** (otherwise tile edges stretch / clamp; the component warns in Awake). It uses `RawImage` referencing a `Texture2D` directly — sprites packed in atlases are not supported. The demo prefab's `ImgBackground` shows the intended setup (bound to the Scroll View, `Screen` viewport, multiplier 1).
 
 ### `NodeLineBuilder`
 

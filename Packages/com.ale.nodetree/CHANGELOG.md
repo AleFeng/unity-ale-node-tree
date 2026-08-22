@@ -6,6 +6,22 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.3.0] - 2026-08-22
+
+新增四方连续无限滚动背景组件 `UIScrollingBackground`（RawImage uvRect UV 滚动）。
+
+### 新增
+
+- **四方连续无限滚动背景 `UIScrollingBackground`**：以 RawImage **初始 Rect 尺寸**为一块 tile（≤0 时回退纹理像素尺寸），`uvRect.size = 视口/tile` 铺满视口，滚动仅偏移 `uvRect`、靠纹理 **Repeat** 采样实现四方连续无限平铺——单物体单 DrawCall、零 tile 实例、零逐帧分配（静止时零开销）。可选绑定 `ScrollRect`：`LateUpdate` 轮询 `Content.anchoredPosition` 增量、与 Content **同向**滚动（统一覆盖拖拽 / 惯性 / 回弹 / 代码驱动，首帧与重绑定只快照不回放、无跳变）；`speedMultiplier` 速度倍率（1 = 同速，≠1 视差，负值反向）。视口模式 `SelfRect`（自身 RectTransform，image 为子物体时自动拉伸铺满）/ `Screen`（按根 `Canvas.scaleFactor` 换算画布单位并轮询分辨率变化）。纹理 Wrap 非 Repeat 时 Awake 检测并告警；未绑定 ScrollRect 时可经公开 API 手动驱动。
+
+### 变更
+
+- **Demo 背景改为无限滚动**：`UIStoryTreeWindow` 预制体的 `ImgBackground` 由 `Image`（Sprite）改为 `RawImage`（直接引用 Texture2D、关闭 `raycastTarget`），并挂载 `UIScrollingBackground`（绑定 Scroll View、`Screen` 视口、倍率 1）；`T_NodeTree_Background.jpg` 导入设置 Wrap Mode 由 Clamp 改为 **Repeat**（顺带修复原 1820 宽背景盖不满 1920 屏的边缘缝隙）。
+
+### API
+
+- `UIScrollingBackground`：属性 `SpeedMultiplier` / `ViewportMode` / `TileSize`（只读）/ `ScrollOffset`（只读）；方法 `ScrollBy(Vector2)`（手动视觉增量，不乘倍率）、`SetScrollOffset(Vector2)`、`ResetOffset()`、`SetScrollRect(ScrollRect)`（运行时重绑定，无跳变）、`Refit()`（布局变化后重新适配视口）。
+
 ## [1.2.0] - 2026-08-03
 
 视口裁剪修复 + 编辑器视口 UX + 全工程 Bug/优化清理。

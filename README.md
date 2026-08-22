@@ -61,6 +61,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | 高性能运行时 UI | 按节点类型对象池化（基于 `com.ale.toolkit`），视口裁剪按需 Spawn / Despawn，连线 Mesh 合批降 DrawCall。 |
 | URP 流光连线 | `NodeTree/NodeLineFlow` 透明流光 Shader（流动纹理 / 边缘渐变 / 辉光 / HDR 颜色），每条连线的样式取自其**子（目标）节点类型**。 |
 | 存档友好 | `NodeTreeSaveDataManager` 以标签制维护各节点状态，JSON 序列化，`Save()` / `Load()` / `Get()` / `Set()` 对接外部存档。 |
+| 无限滚动背景 | `UIScrollingBackground` 四方连续无限滚动背景：RawImage uvRect UV 滚动（纹理需 Repeat），可选绑定 ScrollRect 与 Content 同向跟随、速度倍率视差、SelfRect / Screen 视口自适配，亦可经公开 API 手动驱动。 |
 | 底层集成 | 节点名 / 描述本地化经 `com.ale.toolkit` 的 `AttributeValue`(Text)（启用 `ATK_LOCALIZATION` 取多语、否则纯文本）；悬停弹窗淡入淡出基于 `com.ale.toolkit` 中央 Tween；对象池复用 `com.ale.toolkit`。插件本身无本地化 / DOTween 宏。 |
 
 ### 模块一览
@@ -70,7 +71,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件与状态** | 挂载条件与判定 | `ConditionExpression`(Toolkit)、`INodeTreeStateSource`、`NodeTreeConditionContext`、内置判定器 `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
 | **存档** | 节点标签状态 | `NodeTreeSaveDataManager` |
-| **运行时 UI** | 节点树展示 | `UINodeTreeWindow`、`UINodeBase`、`NodeLineBuilder` |
+| **运行时 UI** | 节点树展示与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
 > 每个模块的字段、API 与用法见 [详细文档](#-详细文档)。
