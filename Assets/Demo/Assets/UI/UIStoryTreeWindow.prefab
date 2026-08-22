@@ -88,7 +88,7 @@ MonoBehaviour:
   scrollRect: {fileID: 5325539929615141235}
   image: {fileID: 5412455315607853261}
   viewportMode: 1
-  speedMultiplier: {x: 1, y: 1}
+  speedMultiplier: {x: 0.5, y: 0.5}
 --- !u!1 &1550333859416226849
 GameObject:
   m_ObjectHideFlags: 0
@@ -232,7 +232,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -951.49915, y: 531.49927}
+  m_AnchoredPosition: {x: -951.4996, y: 531.49976}
   m_SizeDelta: {x: 1920, y: 1080}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &2471103459342581810
@@ -445,8 +445,8 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 8596886659529660180}
   m_HandleRect: {fileID: 2254450899281476305}
   m_Direction: 2
-  m_Value: 1.000043
-  m_Size: 0.98425925
+  m_Value: 1.0000143
+  m_Size: 0.98396134
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -848,8 +848,8 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 7750349415163167691}
   m_HandleRect: {fileID: 3227453275207578772}
   m_Direction: 0
-  m_Value: -0.000050264247
-  m_Size: 0.99114585
+  m_Value: -0.000025132123
+  m_Size: 0.9908458
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:

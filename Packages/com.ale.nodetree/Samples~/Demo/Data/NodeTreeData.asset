@@ -410,7 +410,7 @@ MonoBehaviour:
     line:
       lineType: 2
       lineWidth: 10
-      material: {fileID: 2100000, guid: 2af307e97fc88ba4fba18e05d1dde40c, type: 2}
+      material: {fileID: 2100000, guid: 3c300a56f576af04db18779a2084707a, type: 2}
     attributes: []
   - typeName: "\u7ED3\u5C40"
     resolution: {x: 130, y: 130}
@@ -422,7 +422,7 @@ MonoBehaviour:
     line:
       lineType: 0
       lineWidth: 10
-      material: {fileID: 2100000, guid: 2af307e97fc88ba4fba18e05d1dde40c, type: 2}
+      material: {fileID: 2100000, guid: 3c300a56f576af04db18779a2084707a, type: 2}
     attributes: []
   tags:
   - tagName: Unlock
