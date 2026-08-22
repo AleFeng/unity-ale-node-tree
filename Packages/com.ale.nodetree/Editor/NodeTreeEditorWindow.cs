@@ -27,6 +27,7 @@ namespace Ale.NodeTree.Editor
         private const float GridSpacing      = 20f;  // 背景网格基础间距（画布单位）
         private const float NodeAutoSpacingX = 160f; // 自动布局水平间距（画布单位）
         private const float NodeAutoSpacingY = 120f; // 自动布局垂直间距（画布单位）
+        private static readonly Vector2 NodeFallbackSize = new Vector2(80f, 80f); // 节点类型引用悬空时的回退显示尺寸
         
         #region 基础功能
         // ── 数据 ──
@@ -45,10 +46,12 @@ namespace Ale.NodeTree.Editor
         private int _leftTab;                       // 左侧标签页索引（0=节点类型, 1=标签）
         // ── Layout/Repaint 快照（防止 IMGUI 控件数量不一致） ──
         private string _snapSelectedId;      // Layout 事件时快照的主选中节点 ID
-        private bool   _snapIsDragging;      // Layout 事件时快照的拖拽状态
         private int    _snapNodeTypeIdx = -1; // Layout 事件时快照的节点类型选中索引
         // 选中集合快照：复用同一个 HashSet（Layout 时 Clear + 重填），避免每帧分配
         private readonly HashSet<string> _snapSelectedIds = new HashSet<string>();
+        private bool _snapIsMarquee; // Layout 事件时快照的框选状态
+        // 框选合成结果快照：框选进行中时节点高亮改读它，即「松手后会变成的选中」
+        private readonly HashSet<string> _snapMarqueeResult = new HashSet<string>();
 
         // ── 缓存的 GUIStyle / 数组（避免每次 OnGUI 重新分配）──
         private static readonly string[] LayoutDirLabels =
@@ -132,7 +135,8 @@ namespace Ale.NodeTree.Editor
                 EditorPrefs.GetFloat(PrefKeyPanY, 0f));
             _canvas.Zoom = EditorPrefs.GetFloat(PrefKeyZoom, 1f);
             _canvas.Zoom = Mathf.Clamp(_canvas.Zoom, NodeTreeCanvasState.MinZoom, NodeTreeCanvasState.MaxZoom);
-            wantsMouseMove = true; // 鼠标移动时触发事件，用于连线悬停检测
+            wantsMouseMove = true;            // 鼠标移动时触发事件，用于连线悬停检测
+            wantsMouseEnterLeaveWindow = true; // 需要 MouseLeaveWindow 事件：鼠标拖出窗口时兜底结束框选/拖拽（默认关闭则该事件不会送达 OnGUI）
             Undo.undoRedoPerformed += OnUndoRedoPerformed;
 
             // 恢复上次打开的配置
@@ -191,6 +195,7 @@ namespace Ale.NodeTree.Editor
             _lastPropertyNodeId    = null;
             _pendingCollapseNodeId = null;
             _nodeDragMoved         = false;
+            ClearMarqueeState();
         }
 
         /// <summary>
@@ -203,9 +208,12 @@ namespace Ale.NodeTree.Editor
             if (Event.current.type == EventType.Layout)
             {
                 _snapSelectedId         = _canvas.SelectedNodeId;
-                _snapIsDragging         = _canvas.IsDraggingNode;
                 _snapSelectedIds.Clear();
                 foreach (var selId in _canvas.SelectedNodeIds) _snapSelectedIds.Add(selId);
+                _snapIsMarquee = _isMarquee;
+                _snapMarqueeResult.Clear();
+                if (_isMarquee)
+                    foreach (var mqId in _marqueeResult) _snapMarqueeResult.Add(mqId);
                 _snapNodeTypeIdx        = _selectedNodeTypeIdx;
                 _snapIdDuplicateWarning = _idDuplicateWarning;
                 _snapHoveredNodeId      = _hoveredNodeId;
@@ -565,8 +573,7 @@ namespace Ale.NodeTree.Editor
             foreach (var node in _config.nodes)
             {
                 if (node == null) continue;
-                var type     = _config.GetNodeType(node.nodeTypeRef);
-                Vector2 half = (type != null ? type.resolution : new Vector2(80f, 80f)) * 0.5f;
+                Vector2 half = GetNodeSize(node) * 0.5f;
                 minX = Mathf.Min(minX, node.position.x - half.x);
                 maxX = Mathf.Max(maxX, node.position.x + half.x);
                 minY = Mathf.Min(minY, node.position.y - half.y);
@@ -1079,7 +1086,8 @@ namespace Ale.NodeTree.Editor
             type.label    = EditorGUILayout.TextField("显示标签", type.label);
 
             EditorGUILayout.Space(4f);
-            type.resolution = EditorGUILayout.Vector2Field("节点尺寸", type.resolution);
+            // 下限 1：0 / 负尺寸会让节点矩形退化，令 Rect.Contains（悬停 / 点击）与 Rect.Overlaps（框选）同时失效
+            type.resolution = Vector2.Max(EditorGUILayout.Vector2Field("节点尺寸", type.resolution), Vector2.one);
             type.shape      = (ENodeShape)EditorGUILayout.EnumPopup("节点形状", type.shape);
             type.color      = EditorGUILayout.ColorField("节点颜色", type.color);
             type.icon       = (Sprite)EditorGUILayout.ObjectField(
@@ -1109,6 +1117,28 @@ namespace Ale.NodeTree.Editor
             _nodeTypeAttrListDrawer.Draw(AttrCtx, null, type.attributes, "自定义属性字段");
         }
         #endregion
+        #endregion
+
+        #region 节点尺寸
+        /// <summary>
+        /// 取节点的显示尺寸（画布单位）：来自其节点类型的 <c>resolution</c>，
+        /// 类型引用悬空时回退到 <see cref="NodeFallbackSize"/>。
+        /// 全窗口统一走此入口，避免回退默认值散落各处。
+        /// </summary>
+        private Vector2 GetNodeSize(NodeData node)
+        {
+            if (node == null) return NodeFallbackSize;
+            var type = _config ? _config.GetNodeType(node.nodeTypeRef) : null;
+            return type != null ? type.resolution : NodeFallbackSize;
+        }
+
+        /// <summary>
+        /// 取节点在画布局部屏幕坐标系中的矩形（已含缩放与平移）。
+        /// 与 <see cref="DrawNodes"/> 的绘制、悬停、点击命中共用同一矩形，
+        /// 框选亦据此判定相交，保证四者判定完全一致。
+        /// </summary>
+        private Rect GetNodeRect(NodeData node)
+            => _canvas.GetNodeScreenRect(node.position, GetNodeSize(node));
         #endregion
 
         #region 中央视口
@@ -1166,6 +1196,9 @@ namespace Ale.NodeTree.Editor
 
             // 最后画箭头（在节点之上，保证不被节点形状遮挡）
             DrawConnectionArrows(localRect);
+
+            // 框选矩形（覆盖节点与箭头，位于底部提示栏之下）
+            DrawMarquee();
 
             // 底部常驻操作说明栏（黑底白字，位于连线模式提示之下）
             DrawOperationHint(localRect);
@@ -1261,9 +1294,8 @@ namespace Ale.NodeTree.Editor
 
             foreach (var node in _config.nodes)
             {
-                var nodeType = _config.GetNodeType(node.nodeTypeRef);
-                Vector2 nodeSize = nodeType != null ? nodeType.resolution : new Vector2(80f, 80f);
-                Rect nodeRect    = _canvas.GetNodeScreenRect(node.position, nodeSize);
+                var nodeType  = _config.GetNodeType(node.nodeTypeRef);
+                Rect nodeRect = GetNodeRect(node);
 
                 // 视口剔除：将节点矩形向下扩展 20px（容纳节点下方的 ID 标签），
                 // 完全在画布外的节点不绘制，也不参与鼠标事件检测
@@ -1274,7 +1306,10 @@ namespace Ale.NodeTree.Editor
                 if (isMouseEvent && nodeRect.Contains(Event.current.mousePosition))
                     newHoveredId = node.nodeId;
 
-                bool isSelected = _snapSelectedIds.Contains(node.nodeId);
+                // 框选进行中：高亮直接预览「松手后的选中」，使 Shift 加选 / Ctrl 反选所见即所得
+                bool isSelected = _snapIsMarquee
+                    ? _snapMarqueeResult.Contains(node.nodeId)
+                    : _snapSelectedIds.Contains(node.nodeId);
                 bool isHovered  = node.nodeId == _snapHoveredNodeId;
 
                 NodeDrawer.DrawNode(node, nodeType, isSelected, isHovered, nodeRect);
@@ -1442,10 +1477,31 @@ namespace Ale.NodeTree.Editor
         private string _pendingCollapseNodeId; // 按下时点中的多选集内节点（无修饰键）：MouseUp 时若未拖动则收敛为单选
         private bool   _nodeDragMoved;         // 本次左键手势是否真正拖动过节点
 
+        // ── 框选（marquee）──
+        /// <summary>框选与起框时既有选中的合成方式，由按下瞬间的修饰键决定。</summary>
+        private enum EMarqueeMode
+        {
+            Replace = 0, // 无修饰键：仅保留框内命中
+            Add     = 1, // Shift：并集加选
+            Toggle  = 2, // Ctrl/Cmd：对称差反选
+        }
+        private bool         _isMarquee;          // 是否正在框选
+        private Vector2      _marqueeStartCanvas; // 起点（画布坐标：框选途中缩放/平移时锚点不漂移）
+        private Vector2      _marqueeCurCanvas;   // 当前点（画布坐标）
+        private EMarqueeMode _marqueeMode;        // 合成模式
+        private readonly List<string>    _marqueeBase       = new List<string>();    // 起框时的选中快照（有序）
+        private readonly HashSet<string> _marqueeBaseSet    = new HashSet<string>(); // 同上，O(1) 判定
+        private readonly HashSet<string> _marqueeHits       = new HashSet<string>(); // 框内命中（中间量）
+        private readonly List<string>    _marqueeResult     = new List<string>();    // 合成后的最终选中（按 nodes 顺序）
+        private const float MarqueeClickThreshold = 3f; // 位移小于此值（屏幕像素）视为「纯点击」而非框选
+        private static readonly Color MarqueeFillColor   = new Color(0.30f, 0.60f, 1f, 0.15f); // 框选填充
+        private static readonly Color MarqueeBorderColor = new Color(0.40f, 0.70f, 1f, 0.90f); // 框选边框
+
         /// <summary>
         /// 处理画布鼠标/滚轮交互：
         /// 滚轮以光标为中心缩放，中键拖拽平移，
-        /// 左键点击空白取消选中，左键拖拽移动节点，左键释放结束拖拽，右键空白弹出画布菜单。
+        /// 左键在空白处按下并拖拽进行框选（位移不足阈值时退化为「点击空白取消选中」），
+        /// 左键拖拽节点移动节点，左键释放结束拖拽 / 提交框选，右键空白弹出画布菜单。
         /// </summary>
         private void HandleCanvasInput(Rect canvasRect)
         {
@@ -1454,6 +1510,19 @@ namespace Ale.NodeTree.Editor
 
             // 只在画布区域内响应
             bool inCanvas = canvasRect.Contains(evt.mousePosition);
+
+            // 兜底：本窗口未使用 GUIUtility.hotControl，鼠标移出窗口后松开时 MouseUp 会被转成 Ignore，
+            // 只有 rawType 仍为 MouseUp；鼠标直接拖出窗口则靠 MouseLeaveWindow
+            //（需 OnEnable 里的 wantsMouseEnterLeaveWindow = true，否则该事件不会送达）。
+            // 不兜底会导致框选矩形常驻、拖拽态永久残留（后者是既有隐患）。
+            if ((evt.rawType == EventType.MouseUp && evt.type != EventType.MouseUp)
+                || evt.type == EventType.MouseLeaveWindow)
+            {
+                if (_isMarquee)             { FinishMarquee(true);          Repaint(); }
+                if (_canvas.IsDraggingNode) { _canvas.IsDraggingNode = false; Repaint(); }
+                _pendingCollapseNodeId = null;
+                _nodeDragMoved         = false;
+            }
 
             switch (evt.type)
             {
@@ -1491,30 +1560,22 @@ namespace Ale.NodeTree.Editor
                         ShowCanvasContextMenu(localMouse);
                         evt.Use();
                     }
-                    else if (evt.button == 0 && !_snapIsDragging)
+                    else if (evt.button == 0 && !_isAddingConnection)
                     {
-                        // 点击空白处取消选中（若未命中任何节点）
-                        bool hitNode = false;
-                        if (_config)
-                        {
-                            foreach (var node in _config.nodes)
-                            {
-                                var nodeType = _config.GetNodeType(node.nodeTypeRef);
-                                Vector2 size = nodeType != null ? nodeType.resolution : new Vector2(80f, 80f);
-                                var nodeRect = _canvas.GetNodeScreenRect(node.position, size);
-                                if (nodeRect.Contains(localMouse)) { hitNode = true; break; }
-                            }
-                        }
-                        if (!hitNode)
-                        {
-                            _canvas.SelectedNodeId = null;
-                            Repaint();
-                        }
+                        // 左键落在空白处 = 开始框选。节点右键/左键在 DrawNodes、连线在
+                        // HandleConnectionInteraction 已先行消费事件，故能到达此处即代表未命中任何节点或连线。
+                        // 位移不足阈值时 MouseUp 会退化为「纯点击空白取消选中」，保持既有行为。
+                        // 连线添加模式下不启用框选，避免与连线目标点选冲突。
+                        _canvas.IsDraggingNode = false; // 自愈：上次 MouseUp 若丢失会残留拖拽态
+                        BeginMarquee(localMouse, evt);
+                        evt.Use();
+                        Repaint();
                     }
                     break;
 
                 case EventType.MouseDrag:
-                    if (!inCanvas && !_canvas.IsDraggingNode) break;
+                    // 框选时也要放行：向侧面板方向扫选时鼠标会越出画布边缘，早退会让选框卡住不动
+                    if (!inCanvas && !_canvas.IsDraggingNode && !_isMarquee) break;
                     if (evt.button == 2)
                     {
                         // 中键拖拽：平移画布
@@ -1541,6 +1602,14 @@ namespace Ale.NodeTree.Editor
                             Repaint();
                         }
                     }
+                    else if (evt.button == 0 && _isMarquee)
+                    {
+                        // 框选拖拽：更新终点并重算合成结果（与节点拖拽互斥，二者不会同时为真）
+                        _marqueeCurCanvas = _canvas.ScreenToCanvas(localMouse);
+                        UpdateMarqueeResult();
+                        evt.Use();
+                        Repaint();
+                    }
                     break;
 
                 case EventType.MouseUp:
@@ -1548,6 +1617,12 @@ namespace Ale.NodeTree.Editor
                     {
                         _canvas.IsDraggingNode = false;
                         evt.Use();
+                    }
+                    if (evt.button == 0 && _isMarquee)
+                    {
+                        FinishMarquee(true);
+                        evt.Use();
+                        Repaint();
                     }
                     if (evt.button == 0)
                     {
@@ -1563,8 +1638,16 @@ namespace Ale.NodeTree.Editor
                     break;
 
                 case EventType.KeyDown:
+                    // Esc：取消进行中的框选。必须排在最前 —— 本 switch 分支是严格的 if/else if 链，
+                    // 挂到链尾永远会被前面的连线模式 / Delete 判定挡住。
+                    if (_isMarquee && evt.keyCode == KeyCode.Escape)
+                    {
+                        FinishMarquee(false);
+                        evt.Use();
+                        Repaint();
+                    }
                     // Esc：退出连线添加模式
-                    if (_isAddingConnection && evt.keyCode == KeyCode.Escape)
+                    else if (_isAddingConnection && evt.keyCode == KeyCode.Escape)
                     {
                         _isAddingConnection = false;
                         _connectionSourceId = null;
@@ -1595,6 +1678,137 @@ namespace Ale.NodeTree.Editor
                     }
                     break;
             }
+        }
+
+        /// <summary>
+        /// 在画布空白处按下左键：进入框选。
+        /// 起点记录为画布坐标，使框选途中滚轮缩放 / 中键平移时锚点不漂移。
+        /// 修饰键决定合成模式：Shift = 并集加选，Ctrl/Cmd = 对称差反选，无修饰键 = 替换。
+        /// 此处不清空选中 —— 若最终位移不足阈值（纯点击），由 <see cref="FinishMarquee"/> 按替换模式清空。
+        /// </summary>
+        private void BeginMarquee(Vector2 localMouse, Event evt)
+        {
+            _isMarquee          = true;
+            _marqueeStartCanvas = _canvas.ScreenToCanvas(localMouse);
+            _marqueeCurCanvas   = _marqueeStartCanvas;
+            _marqueeMode        = evt.shift                    ? EMarqueeMode.Add
+                                : evt.control || evt.command   ? EMarqueeMode.Toggle
+                                                               : EMarqueeMode.Replace;
+
+            _marqueeBase.Clear();
+            _marqueeBaseSet.Clear();
+            foreach (var id in _canvas.SelectedNodeIds) { _marqueeBase.Add(id); _marqueeBaseSet.Add(id); }
+
+            // 右侧面板分支（无选中 / 单选 / 多选）会随选中数量在手势中途切换，
+            // 残留的输入框焦点会把未提交文本串到接手同一控件 ID 的其它控件上。
+            GUI.FocusControl(null);
+            UpdateMarqueeResult();
+        }
+
+        /// <summary>
+        /// 结束框选。<paramref name="commit"/> 为 true 时写入合成结果；为 false 时还原起框前的选中（Esc 取消）。
+        /// 位移不足 <see cref="MarqueeClickThreshold"/> 时视为「空白处纯点击」：
+        /// 替换模式清空选中（与框选功能引入前的行为一致），加选 / 反选模式维持原选中。
+        /// 阈值按屏幕像素判定，因此不随缩放变化（画布单位判定会在 Zoom 0.2 时变成 15px 死区）。
+        /// </summary>
+        private void FinishMarquee(bool commit)
+        {
+            if (commit)
+            {
+                var a = _canvas.CanvasToScreen(_marqueeStartCanvas);
+                var b = _canvas.CanvasToScreen(_marqueeCurCanvas);
+                if ((b - a).magnitude < MarqueeClickThreshold)
+                {
+                    if (_marqueeMode == EMarqueeMode.Replace) _canvas.ClearSelection();
+                    else                                      _canvas.SetSelection(_marqueeBase);
+                }
+                else
+                {
+                    _canvas.SetSelection(_marqueeResult);
+                }
+            }
+            else
+            {
+                _canvas.SetSelection(_marqueeBase);
+            }
+            ClearMarqueeState();
+        }
+
+        /// <summary>清空框选运行态（不改动选中集）。</summary>
+        private void ClearMarqueeState()
+        {
+            _isMarquee = false;
+            _marqueeHits.Clear();
+            _marqueeResult.Clear();
+            _marqueeBase.Clear();
+            _marqueeBaseSet.Clear();
+        }
+
+        /// <summary>
+        /// 框选矩形（画布局部屏幕坐标，已归一化为非负宽高）。
+        /// 纯水平 / 垂直扫选会得到零宽或零高矩形，而 <see cref="Rect.Overlaps"/> 用严格不等式判定、
+        /// 零尺寸恒不相交，故各轴至少补足 1px。
+        /// </summary>
+        private Rect GetMarqueeScreenRect()
+        {
+            var a = _canvas.CanvasToScreen(_marqueeStartCanvas);
+            var b = _canvas.CanvasToScreen(_marqueeCurCanvas);
+            float xMin = Mathf.Min(a.x, b.x), xMax = Mathf.Max(a.x, b.x);
+            float yMin = Mathf.Min(a.y, b.y), yMax = Mathf.Max(a.y, b.y);
+            if (xMax - xMin < 1f) xMax = xMin + 1f;
+            if (yMax - yMin < 1f) yMax = yMin + 1f;
+            return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        }
+
+        /// <summary>
+        /// 按当前框选矩形重算「最终选中集」<see cref="_marqueeResult"/>（触碰即选）。
+        /// 直接算出合成结果而非仅命中集，使拖拽途中的高亮预览即为松手后的实际选中。
+        /// 结果按 <c>_config.nodes</c> 顺序排列，保证主选中（末位）稳定可复现。
+        /// 注意：框选途中只写本字段，绝不实时改动 <c>_canvas</c> 的选中集 ——
+        /// HandleCanvasInput 与 DrawRightPanel 处于同一 OnGUI pass，实时改选中会让
+        /// 右侧面板分支与本帧 Layout 算出的控件数量不一致。
+        /// </summary>
+        private void UpdateMarqueeResult()
+        {
+            _marqueeHits.Clear();
+            _marqueeResult.Clear();
+            if (!_config) return;
+
+            var box = GetMarqueeScreenRect();
+            foreach (var node in _config.nodes)
+                if (node != null && box.Overlaps(GetNodeRect(node)))
+                    _marqueeHits.Add(node.nodeId);
+
+            bool replace = _marqueeMode == EMarqueeMode.Replace;
+            // 起框时已选中的：Add 全部保留；Toggle 仅保留「未被框中」的（框中即取消）
+            if (!replace)
+                foreach (var id in _marqueeBase)
+                    if (_marqueeMode == EMarqueeMode.Add || !_marqueeHits.Contains(id))
+                        _marqueeResult.Add(id);
+
+            foreach (var node in _config.nodes)
+            {
+                if (node == null || !_marqueeHits.Contains(node.nodeId)) continue;
+                if (!replace && _marqueeBaseSet.Contains(node.nodeId)) continue; // 上一循环已处理
+                _marqueeResult.Add(node.nodeId);
+            }
+        }
+
+        /// <summary>
+        /// 绘制框选矩形（半透明填充 + 1px 边框）。
+        /// 仅使用 <see cref="EditorGUI.DrawRect"/>，不产生任何 IMGUI 控件 ID，
+        /// 因此无需 Layout 快照，也不影响控件数量一致性。
+        /// </summary>
+        private void DrawMarquee()
+        {
+            if (!_isMarquee || Event.current.type != EventType.Repaint) return;
+
+            var r = GetMarqueeScreenRect();
+            EditorGUI.DrawRect(r, MarqueeFillColor);
+            EditorGUI.DrawRect(new Rect(r.x,        r.y,         r.width, 1f),      MarqueeBorderColor); // 上
+            EditorGUI.DrawRect(new Rect(r.x,        r.yMax - 1f, r.width, 1f),      MarqueeBorderColor); // 下
+            EditorGUI.DrawRect(new Rect(r.x,        r.y,         1f,      r.height), MarqueeBorderColor); // 左
+            EditorGUI.DrawRect(new Rect(r.xMax - 1f, r.y,        1f,      r.height), MarqueeBorderColor); // 右
         }
         #endregion
         
@@ -1655,7 +1869,7 @@ namespace Ale.NodeTree.Editor
             Undo.RecordObject(_config, "添加子节点");
 
             var parentType = _config.GetNodeType(parent.nodeTypeRef);
-            Vector2 parentSize = parentType?.resolution ?? new Vector2(80f, 80f);
+            Vector2 parentSize = GetNodeSize(parent);
 
             Vector2 newPos;
             if (parent.childNodeIds.Count == 0)
@@ -1669,8 +1883,7 @@ namespace Ale.NodeTree.Editor
                 var lastChild = _config.GetNode(parent.childNodeIds[parent.childNodeIds.Count - 1]);
                 if (lastChild != null)
                 {
-                    var lastType = _config.GetNodeType(lastChild.nodeTypeRef);
-                    Vector2 lastSize = lastType?.resolution ?? new Vector2(80f, 80f);
+                    Vector2 lastSize = GetNodeSize(lastChild);
                     newPos = lastChild.position + GetCrossOffset(_config.layoutDirection, lastSize);
                 }
                 else
@@ -2070,7 +2283,7 @@ namespace Ale.NodeTree.Editor
             if (Event.current.type != EventType.Repaint) return;
 
             _operationHintContent ??= new GUIContent(
-                "鼠标中键：拖拽平移　·　滚轮：缩放　·　左键：选中（Shift 加选 / Ctrl 反选）　·　右键：节点 / 连线 / 画布 菜单");
+                "中键：平移　·　滚轮：缩放　·　左键：选中（Shift 加选 / Ctrl 反选）　·　空白拖拽：框选　·　右键：节点 / 连线 / 画布 菜单");
             var style = _operationHintStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
@@ -2369,9 +2582,9 @@ namespace Ale.NodeTree.Editor
             // 已访问即跳过：防回边（环）无限递归导致 StackOverflow，且令多父钻石节点只布局一次（避免后写覆盖）
             if (node == null || !visited.Add(node.nodeId)) return;
 
-            var nodeType = _config.GetNodeType(node.nodeTypeRef);
-            float nodeW = nodeType?.resolution.x ?? 80f;
-            float nodeH = nodeType?.resolution.y ?? 80f;
+            Vector2 nodeSize = GetNodeSize(node);
+            float nodeW = nodeSize.x;
+            float nodeH = nodeSize.y;
 
             float mainSpacing  = horizontal ? NodeAutoSpacingX : NodeAutoSpacingY; // 层级间距（主轴）
             float crossSpacing = horizontal ? NodeAutoSpacingY : NodeAutoSpacingX; // 节点间距（cross 轴）
