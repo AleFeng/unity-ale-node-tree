@@ -16,7 +16,7 @@ namespace Ale.NodeTree.Editor
     /// 三列布局：左侧节点类型/标签管理 | 中央画布（节点拖拽/缩放/平移/连线） | 右侧节点属性面板。
     /// 所有修改通过 Undo.RecordObject + EditorUtility.SetDirty 支持撤销并触发资产保存。
     /// </summary>
-    public class NodeTreeEditorWindow : EditorWindow
+    public partial class NodeTreeEditorWindow : EditorWindow
     {
         // ── 布局常量 ──
         private static readonly Vector2 WindowDefaultSize = new Vector2(1600f, 900f); // 首次打开时的默认窗口尺寸
@@ -210,6 +210,7 @@ namespace Ale.NodeTree.Editor
                 _snapSelectedId         = _canvas.SelectedNodeId;
                 _snapSelectedIds.Clear();
                 foreach (var selId in _canvas.SelectedNodeIds) _snapSelectedIds.Add(selId);
+                SnapshotMultiEditState(); // 批量编辑面板的快照（见 NodeTreeEditorWindow.MultiEdit.cs）
                 _snapIsMarquee = _isMarquee;
                 _snapMarqueeResult.Clear();
                 if (_isMarquee)
@@ -799,9 +800,10 @@ namespace Ale.NodeTree.Editor
         private int _selectedNodeTypeIdx = -1; // 右侧面板当前编辑的节点类型索引，-1 表示未选中
         
         /// <summary>
-        /// 绘制右侧属性面板：
+        /// 绘制右侧属性面板（四选一，优先级自上而下）：
         /// 节点类型被"编辑"选中时显示节点类型属性；
-        /// 画布节点被选中时显示节点属性；
+        /// 画布多选出两个及以上节点时显示批量编辑面板；
+        /// 画布单选一个节点时显示节点属性；
         /// 均未选中时显示提示文字。
         /// 使用 Layout 快照值避免 Repaint 期间控件数量变化。
         /// </summary>
@@ -824,6 +826,10 @@ namespace Ale.NodeTree.Editor
                     if (_snapNodeTypeIdx >= 0 && _snapNodeTypeIdx < _config.nodeTypes.Count)
                     {
                         DrawNodeTypeProperties(_config.nodeTypes[_snapNodeTypeIdx]);
+                    }
+                    else if (_snapSelectedOrder.Count > 1)
+                    {
+                        DrawMultiNodeProperties();
                     }
                     else if (!string.IsNullOrEmpty(_snapSelectedId))
                     {
