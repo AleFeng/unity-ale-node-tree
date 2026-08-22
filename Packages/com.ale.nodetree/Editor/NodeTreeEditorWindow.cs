@@ -44,9 +44,11 @@ namespace Ale.NodeTree.Editor
         private Vector2 _rightScroll;               // 右侧面板滚动位置
         private int _leftTab;                       // 左侧标签页索引（0=节点类型, 1=标签）
         // ── Layout/Repaint 快照（防止 IMGUI 控件数量不一致） ──
-        private string _snapSelectedId;      // Layout 事件时快照的选中节点 ID
+        private string _snapSelectedId;      // Layout 事件时快照的主选中节点 ID
         private bool   _snapIsDragging;      // Layout 事件时快照的拖拽状态
         private int    _snapNodeTypeIdx = -1; // Layout 事件时快照的节点类型选中索引
+        // 选中集合快照：复用同一个 HashSet（Layout 时 Clear + 重填），避免每帧分配
+        private readonly HashSet<string> _snapSelectedIds = new HashSet<string>();
 
         // ── 缓存的 GUIStyle / 数组（避免每次 OnGUI 重新分配）──
         private static readonly string[] LayoutDirLabels =
@@ -187,6 +189,8 @@ namespace Ale.NodeTree.Editor
             _connectionSourceId    = null;
             _idDuplicateWarning    = null;
             _lastPropertyNodeId    = null;
+            _pendingCollapseNodeId = null;
+            _nodeDragMoved         = false;
         }
 
         /// <summary>
@@ -200,6 +204,8 @@ namespace Ale.NodeTree.Editor
             {
                 _snapSelectedId         = _canvas.SelectedNodeId;
                 _snapIsDragging         = _canvas.IsDraggingNode;
+                _snapSelectedIds.Clear();
+                foreach (var selId in _canvas.SelectedNodeIds) _snapSelectedIds.Add(selId);
                 _snapNodeTypeIdx        = _selectedNodeTypeIdx;
                 _snapIdDuplicateWarning = _idDuplicateWarning;
                 _snapHoveredNodeId      = _hoveredNodeId;
@@ -1234,7 +1240,9 @@ namespace Ale.NodeTree.Editor
         
         /// <summary>
         /// 遍历所有节点，通过 NodeDrawer.DrawNode 绘制节点，
-        /// 并处理左键点击（选中/开始拖拽）和右键点击（弹出上下文菜单）。
+        /// 并处理左键点击（选中/加选/反选 + 开始拖拽）和右键点击（弹出上下文菜单）。
+        /// 左键修饰键：Shift = 加选，Ctrl/Cmd = 反选，无修饰键 = 收敛为单选
+        /// （点中已在多选集内的节点时收敛推迟到 MouseUp，以免破坏批量拖拽）。
         /// 节点矩形基于 _canvas.GetNodeScreenRect 计算（含缩放）。
         /// 节点 GL 形状由画布 GL 视口（见 DrawViewport 的 SetGLClip）在边缘做硬件裁切；
         /// 此处的 Overlaps 仅作「完全在外」粗剔除：节点矩形（含下方标签区）完全落在
@@ -1266,7 +1274,7 @@ namespace Ale.NodeTree.Editor
                 if (isMouseEvent && nodeRect.Contains(Event.current.mousePosition))
                     newHoveredId = node.nodeId;
 
-                bool isSelected = node.nodeId == _snapSelectedId;
+                bool isSelected = _snapSelectedIds.Contains(node.nodeId);
                 bool isHovered  = node.nodeId == _snapHoveredNodeId;
 
                 NodeDrawer.DrawNode(node, nodeType, isSelected, isHovered, nodeRect);
@@ -1284,11 +1292,42 @@ namespace Ale.NodeTree.Editor
                     }
                     else
                     {
-                        _canvas.SelectedNodeId    = node.nodeId;
-                        _canvas.IsDraggingNode    = true;
-                        _canvas.DragNodeStartPos  = node.position;
-                        _canvas.DragMouseStartPos = _canvas.ScreenToCanvas(Event.current.mousePosition);
-                        _selectedNodeTypeIdx      = -1;
+                        // Shift = 加选；Ctrl/Cmd = 反选（切换）；无修饰键 = 收敛为单选
+                        bool addMode    = Event.current.shift;
+                        bool toggleMode = Event.current.control || Event.current.command;
+                        bool startDrag  = true;
+
+                        if (toggleMode)
+                        {
+                            _canvas.ToggleSelection(node.nodeId);
+                            // 切换结果为「未选中」时不进入拖拽，避免拖动一个刚被取消选中的节点
+                            startDrag = _canvas.IsSelected(node.nodeId);
+                        }
+                        else if (addMode)
+                        {
+                            _canvas.AddToSelection(node.nodeId);
+                        }
+                        else if (_canvas.IsSelected(node.nodeId) && _canvas.SelectedCount > 1)
+                        {
+                            // 已在多选集内且无修饰键：此刻不收敛，否则批量拖拽会在按下瞬间丢掉多选。
+                            // 仅提升为主选中（作为拖拽增量的参考节点），并记下待收敛节点，
+                            // 等 MouseUp 时若整个手势未发生拖动，再收敛为单选。
+                            _canvas.AddToSelection(node.nodeId);
+                            _pendingCollapseNodeId = node.nodeId;
+                        }
+                        else
+                        {
+                            _canvas.SelectSingle(node.nodeId);
+                        }
+
+                        if (startDrag)
+                        {
+                            _canvas.IsDraggingNode    = true;
+                            _canvas.DragNodeStartPos  = node.position;
+                            _canvas.DragMouseStartPos = _canvas.ScreenToCanvas(Event.current.mousePosition);
+                            _nodeDragMoved            = false;
+                        }
+                        _selectedNodeTypeIdx = -1;
                         GUI.FocusControl(null);
                         Event.current.Use();
                         Repaint();
@@ -1301,7 +1340,10 @@ namespace Ale.NodeTree.Editor
                     && nodeRect.Contains(Event.current.mousePosition))
                 {
                     if (_isAddingConnection) { _isAddingConnection = false; _connectionSourceId = null; }
-                    _canvas.SelectedNodeId = node.nodeId;
+                    // 右键命中的节点已在选中集内：保留整个选中集（供后续批量操作），仅提升为主选中；
+                    // 否则收敛为单选。
+                    if (_canvas.IsSelected(node.nodeId)) _canvas.AddToSelection(node.nodeId);
+                    else                                 _canvas.SelectSingle(node.nodeId);
                     _selectedNodeTypeIdx   = -1;
                     _ctxNodeId             = node.nodeId;
                     ShowContextMenu();
@@ -1396,6 +1438,10 @@ namespace Ale.NodeTree.Editor
         #endregion
         
         #region 中央视口操作
+        // ── 节点拖拽手势状态（按下时于 DrawNodes 写入，结算于 HandleCanvasInput） ──
+        private string _pendingCollapseNodeId; // 按下时点中的多选集内节点（无修饰键）：MouseUp 时若未拖动则收敛为单选
+        private bool   _nodeDragMoved;         // 本次左键手势是否真正拖动过节点
+
         /// <summary>
         /// 处理画布鼠标/滚轮交互：
         /// 滚轮以光标为中心缩放，中键拖拽平移，
@@ -1488,7 +1534,8 @@ namespace Ale.NodeTree.Editor
                             var rawPos    = _canvas.DragNodeStartPos + (curCanvas - _canvas.DragMouseStartPos);
                             // XOR：开关开 + Shift → 临时关闭；开关关 + Shift → 临时开启
                             bool shouldSnap = _snapToGrid ^ evt.shift;
-                            node.position = shouldSnap ? SnapToGrid(rawPos) : rawPos;
+                            node.position  = shouldSnap ? SnapToGrid(rawPos) : rawPos;
+                            _nodeDragMoved = true; // 本次手势确实拖动过，MouseUp 据此跳过延迟收敛
                             MarkDirty(false); // 仅位置变化，跳过重名重扫（避免每拖拽帧分配 Dictionary/HashSet）
                             evt.Use();
                             Repaint();
@@ -1501,6 +1548,17 @@ namespace Ale.NodeTree.Editor
                     {
                         _canvas.IsDraggingNode = false;
                         evt.Use();
+                    }
+                    if (evt.button == 0)
+                    {
+                        // 延迟收敛结算：按下时点的是多选集内的节点且无修饰键，
+                        // 整个手势未发生拖动才收敛为单选（保证「按下即拖」不丢多选）。
+                        if (_pendingCollapseNodeId != null)
+                        {
+                            if (!_nodeDragMoved) { _canvas.SelectSingle(_pendingCollapseNodeId); Repaint(); }
+                            _pendingCollapseNodeId = null;
+                        }
+                        _nodeDragMoved = false;
                     }
                     break;
 
@@ -2012,7 +2070,7 @@ namespace Ale.NodeTree.Editor
             if (Event.current.type != EventType.Repaint) return;
 
             _operationHintContent ??= new GUIContent(
-                "鼠标中键：拖拽平移　·　滚轮：缩放　·　左键：选中节点/连线　·　右键：节点 / 连线 / 画布 菜单");
+                "鼠标中键：拖拽平移　·　滚轮：缩放　·　左键：选中（Shift 加选 / Ctrl 反选）　·　右键：节点 / 连线 / 画布 菜单");
             var style = _operationHintStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
