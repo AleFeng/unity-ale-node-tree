@@ -195,6 +195,7 @@ namespace Ale.NodeTree.Editor
             _lastPropertyNodeId    = null;
             _pendingCollapseNodeId = null;
             _nodeDragMoved         = false;
+            _dragStartPositions.Clear();
             ClearMarqueeState();
         }
 
@@ -1379,6 +1380,7 @@ namespace Ale.NodeTree.Editor
                             _canvas.DragNodeStartPos  = node.position;
                             _canvas.DragMouseStartPos = _canvas.ScreenToCanvas(Event.current.mousePosition);
                             _nodeDragMoved            = false;
+                            CaptureDragStartPositions(); // 批量拖拽：记录全部选中节点的起始位置
                         }
                         _selectedNodeTypeIdx = -1;
                         GUI.FocusControl(null);
@@ -1494,6 +1496,9 @@ namespace Ale.NodeTree.Editor
         // ── 节点拖拽手势状态（按下时于 DrawNodes 写入，结算于 HandleCanvasInput） ──
         private string _pendingCollapseNodeId; // 按下时点中的多选集内节点（无修饰键）：MouseUp 时若未拖动则收敛为单选
         private bool   _nodeDragMoved;         // 本次左键手势是否真正拖动过节点
+        // 批量拖拽：MouseDown 时快照全部选中节点的起始画布坐标（键 = 节点 ID）。
+        // 必须一次性取好 —— 拖拽途中逐帧读当前位置会产生累积漂移。
+        private readonly Dictionary<string, Vector2> _dragStartPositions = new Dictionary<string, Vector2>();
 
         // ── 框选（marquee）──
         /// <summary>框选与起框时既有选中的合成方式，由按下瞬间的修饰键决定。</summary>
@@ -1519,7 +1524,8 @@ namespace Ale.NodeTree.Editor
         /// 处理画布鼠标/滚轮交互：
         /// 滚轮以光标为中心缩放，中键拖拽平移，
         /// 左键在空白处按下并拖拽进行框选（位移不足阈值时退化为「点击空白取消选中」），
-        /// 左键拖拽节点移动节点，左键释放结束拖拽 / 提交框选，右键空白弹出画布菜单。
+        /// 左键拖拽节点移动节点（多选时全部选中节点按同一位移整体跟随），
+        /// 左键释放结束拖拽 / 提交框选，右键空白弹出画布菜单。
         /// </summary>
         private void HandleCanvasInput(Rect canvasRect)
         {
@@ -1540,6 +1546,7 @@ namespace Ale.NodeTree.Editor
                 if (_canvas.IsDraggingNode) { _canvas.IsDraggingNode = false; Repaint(); }
                 _pendingCollapseNodeId = null;
                 _nodeDragMoved         = false;
+                _dragStartPositions.Clear();
             }
 
             switch (evt.type)
@@ -1605,7 +1612,7 @@ namespace Ale.NodeTree.Editor
                     else if (evt.button == 0 && _canvas.IsDraggingNode
                              && !string.IsNullOrEmpty(_canvas.SelectedNodeId) && _config)
                     {
-                        // 左键拖拽：移动节点（可选吸附到网格）
+                        // 左键拖拽：移动主拖拽节点，其余选中节点按同一位移整体跟随（可选吸附到网格）
                         var node = _config.GetNode(_canvas.SelectedNodeId);
                         if (node != null)
                         {
@@ -1613,7 +1620,27 @@ namespace Ale.NodeTree.Editor
                             var rawPos    = _canvas.DragNodeStartPos + (curCanvas - _canvas.DragMouseStartPos);
                             // XOR：开关开 + Shift → 临时关闭；开关关 + Shift → 临时开启
                             bool shouldSnap = _snapToGrid ^ evt.shift;
-                            node.position  = shouldSnap ? SnapToGrid(rawPos) : rawPos;
+                            var  newPos     = shouldSnap ? SnapToGrid(rawPos) : rawPos;
+
+                            // 整段手势只在第一次真正移动时记一次 Undo，使一次拖拽对应一次 Ctrl+Z
+                            if (!_nodeDragMoved)
+                                Undo.RecordObject(_config,
+                                    _dragStartPositions.Count > 1 ? "批量移动节点" : "移动节点");
+
+                            node.position = newPos;
+                            if (_dragStartPositions.Count > 1)
+                            {
+                                // 吸附只对主拖拽节点算一次，再把「同一个位移」施加给其余选中节点。
+                                // 逐节点各自吸附会把原本不在网格上的节点互相拉拢，破坏选中集的相对布局。
+                                var delta = newPos - _canvas.DragNodeStartPos;
+                                foreach (var kv in _dragStartPositions)
+                                {
+                                    if (kv.Key == node.nodeId) continue;
+                                    var other = _config.GetNode(kv.Key);
+                                    if (other != null) other.position = kv.Value + delta;
+                                }
+                            }
+
                             _nodeDragMoved = true; // 本次手势确实拖动过，MouseUp 据此跳过延迟收敛
                             MarkDirty(false); // 仅位置变化，跳过重名重扫（避免每拖拽帧分配 Dictionary/HashSet）
                             evt.Use();
@@ -1652,6 +1679,7 @@ namespace Ale.NodeTree.Editor
                             _pendingCollapseNodeId = null;
                         }
                         _nodeDragMoved = false;
+                        _dragStartPositions.Clear();
                     }
                     break;
 
@@ -1695,6 +1723,21 @@ namespace Ale.NodeTree.Editor
                         }
                     }
                     break;
+            }
+        }
+
+        /// <summary>
+        /// 记录当前全部选中节点的起始画布坐标，供批量拖拽按整体位移还原。
+        /// 在 MouseDown 时一次性取好；拖拽途中逐帧读当前位置会产生累积漂移。
+        /// </summary>
+        private void CaptureDragStartPositions()
+        {
+            _dragStartPositions.Clear();
+            if (!_config) return;
+            foreach (var nodeId in _canvas.SelectedNodeIds)
+            {
+                var node = _config.GetNode(nodeId);
+                if (node != null) _dragStartPositions[nodeId] = node.position;
             }
         }
 
