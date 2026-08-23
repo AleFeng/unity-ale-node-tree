@@ -23,7 +23,10 @@ MonoBehaviour:
       enumTypeRef: 
       ints: 
       floats: []
-      strings: []
+      strings:
+      - 
+      - 
+      - 
       objRefs: []
       curves: []
       objAddresses: []
@@ -33,13 +36,24 @@ MonoBehaviour:
       enumTypeRef: 
       ints: 
       floats: []
-      strings: []
+      strings:
+      - 
+      - 
+      - 
       objRefs: []
       curves: []
       objAddresses: []
     position: {x: 0, y: 0}
     attributeValues: []
-    tagRules: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0"
     - "\u5F00\u59CB\u8282\u70B9_1"
@@ -53,7 +67,10 @@ MonoBehaviour:
       enumTypeRef: 
       ints: 
       floats: []
-      strings: []
+      strings:
+      - 
+      - 
+      - 
       objRefs: []
       curves: []
       objAddresses: []
@@ -63,13 +80,24 @@ MonoBehaviour:
       enumTypeRef: 
       ints: 
       floats: []
-      strings: []
+      strings:
+      - 
+      - 
+      - 
       objRefs: []
       curves: []
       objAddresses: []
     position: {x: 260, y: -220}
     attributeValues: []
-    tagRules: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_0_0"
   - nodeId: "\u5F00\u59CB\u8282\u70B9_1"
@@ -104,7 +132,15 @@ MonoBehaviour:
       objAddresses: []
     position: {x: 260, y: 220}
     attributeValues: []
-    tagRules: []
+    tagRules:
+    - tagName: Unlock
+      condition:
+        groupOperator: 0
+        groups: []
+    - tagName: Finished
+      condition:
+        groupOperator: 0
+        groups: []
     childNodeIds:
     - "\u5F00\u59CB\u8282\u70B9_1_0"
   - nodeId: "\u5F00\u59CB\u8282\u70B9_0_0"
@@ -402,7 +438,7 @@ MonoBehaviour:
   nodeTypes:
   - typeName: "\u666E\u901A"
     resolution: {x: 100, y: 100}
-    shape: 0
+    shape: 1
     color: {r: 0.6, g: 0.8, b: 0.8, a: 1}
     icon: {fileID: 0}
     label: 
@@ -435,3 +471,4 @@ MonoBehaviour:
     autoRefresh: 0
   layoutDirection: 0
   zoom: 1
+  gridSize: 20
