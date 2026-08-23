@@ -275,6 +275,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4117621256016102769}
+  - {fileID: 2729614510043525609}
   - {fileID: 785635657359244749}
   - {fileID: 6247741845619961500}
   - {fileID: 6253425991841701451}
@@ -298,7 +299,57 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   iconImage: {fileID: 5080970458419191806}
+  nodeNameText: {fileID: 0}
+  nodeDescText: {fileID: 0}
+  nodeData:
+    nodeId: 
+    nodeTypeRef: 
+    comment: 
+    uiIcon: {fileID: 0}
+    nodeName:
+      type: 10
+      isArray: 0
+      enumTypeRef: 
+      ints: 
+      floats: []
+      strings: []
+      objRefs: []
+      curves: []
+      objAddresses: []
+    nodeDesc:
+      type: 10
+      isArray: 0
+      enumTypeRef: 
+      ints: 
+      floats: []
+      strings: []
+      objRefs: []
+      curves: []
+      objAddresses: []
+    position: {x: 0, y: 0}
+    attributeValues: []
+    tagRules: []
+    childNodeIds: []
+  nodeType:
+    typeName: 
+    resolution: {x: 100, y: 100}
+    shape: 0
+    color: {r: 0, g: 1, b: 1, a: 1}
+    icon: {fileID: 0}
+    label: 
+    uiPrefab: {fileID: 0}
+    line:
+      lineType: 0
+      lineWidth: 10
+      material: {fileID: 0}
+    attributes: []
   infoPanel: {fileID: 8520160575261584531}
+  fadeInDuration: 0.2
+  fadeOutDuration: 0.3
+  highlightImage: {fileID: 7412789315107998608}
+  highlightAlpha: 1
+  highlightFadeInDuration: 0.15
+  highlightFadeOutDuration: 0.15
 --- !u!114 &941304818997078503
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -336,6 +387,81 @@ MonoBehaviour:
       m_Key: 
     m_FallbackState: 0
     m_WaitForCompletion: 0
+--- !u!1 &3855963831922162228
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2729614510043525609}
+  - component: {fileID: 6980487732646167150}
+  - component: {fileID: 7412789315107998608}
+  m_Layer: 0
+  m_Name: ImgHighlight
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2729614510043525609
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3855963831922162228}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7736833601709634054}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &6980487732646167150
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3855963831922162228}
+  m_CullTransparentMesh: 1
+--- !u!114 &7412789315107998608
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3855963831922162228}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 9
 --- !u!1 &5069491732636049906
 GameObject:
   m_ObjectHideFlags: 0
