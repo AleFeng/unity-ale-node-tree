@@ -24,10 +24,17 @@ namespace Ale.NodeTree.Editor
         private const float ToolbarHeight    = 44f;  // 工具栏高度（像素）
         private const float LeftPanelWidth   = 260f; // 左侧面板宽度（像素）
         private const float RightPanelWidth  = 380f; // 右侧面板宽度（像素）
-        private const float GridSpacing      = 20f;  // 背景网格基础间距（画布单位）
+        private const float GridFallbackSize = 20f;  // 未加载配置资产时的网格尺寸回退值
         private const float NodeAutoSpacingX = 160f; // 自动布局水平间距（画布单位）
         private const float NodeAutoSpacingY = 120f; // 自动布局垂直间距（画布单位）
         private static readonly Vector2 NodeFallbackSize = new Vector2(80f, 80f); // 节点类型引用悬空时的回退显示尺寸
+
+        /// <summary>
+        /// 当前网格的最小单位格长度（画布单位）。取自配置资产的 <see cref="NodeTreeData.GridSize"/>（已保证 ≥ 1），
+        /// 未加载配置时回退到 <see cref="GridFallbackSize"/>。
+        /// 背景网格间距、拖拽吸附与方向键移动步长共用此值。
+        /// </summary>
+        private float GridSpacing => _config ? _config.GridSize : GridFallbackSize;
         
         #region 基础功能
         // ── 数据 ──
@@ -75,6 +82,7 @@ namespace Ale.NodeTree.Editor
             "「前置节点已完成（NodeTree.NodeFinished）」条件；关闭后则不自动写入，需手动配置。" +
             "（项目级设置，记录于 ProjectSettings/NodeTreeEditorSettings.asset，随版本库共享）");
         private GUIStyle _snapStyle;
+        private GUIContent _gridGroupLabel; // 工具栏「网格：」分组标签（缓存，避免每帧重建）
         private GUIStyle _warnLabelStyle;
         private GUIStyle _duplicateLabelStyle;
         private GUIStyle _connectionHintStyle;
@@ -515,6 +523,12 @@ namespace Ale.NodeTree.Editor
                 }
 
                 GUILayout.Space(8f);
+                // ── 网格：吸附开关 + 最小单位格长度 ──
+                _gridGroupLabel ??= new GUIContent("网格：",
+                    "画布背景网格。开启「吸附网格」后，拖拽与方向键移动会对齐到网格交叉点；" +
+                    "右侧数值为网格的最小单位格长度（画布单位），存于配置资产、随版本库共享。");
+                GUILayout.Label(_gridGroupLabel, GUILayout.Width(40f));
+
                 // 吸附网格开关：开启时拖拽始终吸附；关闭时按住 Shift 可临时吸附
                 var snapStyle = _snapStyle ??= new GUIStyle(EditorStyles.toolbarButton);
                 snapStyle.normal.textColor   = _snapToGrid ? new Color(0.2f, 0.85f, 0.2f) : new Color(0.5f, 0.5f, 0.5f);
@@ -523,6 +537,21 @@ namespace Ale.NodeTree.Editor
                 snapStyle.active.textColor   = snapStyle.normal.textColor;
                 _snapToGrid = GUILayout.Toggle(_snapToGrid, "吸附网格",
                     snapStyle, GUILayout.Width(64f));
+
+                // 网格尺寸输入框：恒定绘制，未加载配置时灰显并显示回退值
+                using (new EditorGUI.DisabledScope(!_config))
+                {
+                    EditorGUI.BeginChangeCheck();
+                    float newGrid = EditorGUILayout.FloatField(
+                        _config ? _config.gridSize : GridFallbackSize, GUILayout.Width(44f));
+                    if (EditorGUI.EndChangeCheck() && _config)
+                    {
+                        Undo.RecordObject(_config, "修改网格尺寸");
+                        // 下限 1 防止网格计算发散；上限 500 防止误输入超大值把节点甩出视口
+                        _config.gridSize = Mathf.Clamp(newGrid, 1f, 500f);
+                        MarkDirty(false); // 不改节点数据，无需重扫重名
+                    }
+                }
 
                 GUILayout.FlexibleSpace();
 
@@ -1409,6 +1438,9 @@ namespace Ale.NodeTree.Editor
         private void DrawGridBackground(Rect rect)
         {
             float spacing = GridSpacing * _canvas.Zoom;
+            // 网格尺寸可配置后，小格 + 小缩放会让线数暴涨（如 1 格 × 0.2 缩放 ≈ 5000 条 DrawRect）。
+            // 屏幕间距不足 3px 时本来就糊成一片，直接不画，同时兜住性能。
+            if (spacing < 3f) return;
 
             // ── 垂直线（X 轴，Y 轴向上不影响 X 方向）──
             // 锚定点：画布 X=0 对应屏幕 X = panOffset.x
@@ -2977,10 +3009,13 @@ namespace Ale.NodeTree.Editor
         /// <summary>
         /// 将画布坐标吸附到最近的 GridSpacing 整数倍网格点。
         /// </summary>
-        private static Vector2 SnapToGrid(Vector2 pos)
-            => new Vector2(
-                Mathf.Round(pos.x / GridSpacing) * GridSpacing,
-                Mathf.Round(pos.y / GridSpacing) * GridSpacing);
+        private Vector2 SnapToGrid(Vector2 pos)
+        {
+            float grid = GridSpacing;
+            return new Vector2(
+                Mathf.Round(pos.x / grid) * grid,
+                Mathf.Round(pos.y / grid) * grid);
+        }
         #endregion
 
         #region 节点导航

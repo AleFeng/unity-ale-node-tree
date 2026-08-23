@@ -23,6 +23,14 @@ namespace Ale.NodeTree.Runtime
         [Header("布局设置")]
         public ELayoutDirection layoutDirection = ELayoutDirection.Left2Right; // 编辑器画布的整体布局方向
         public float zoom = 1.0f;                                              // 编辑器画布的当前缩放比例（由编辑器写入，运行时不使用）
+        [Tooltip("网格尺寸: 编辑器画布背景网格的最小单位格长度（画布单位），同时是拖拽吸附与方向键移动的步长。运行时不使用。")]
+        public float gridSize = 20f;                                           // 编辑器画布的网格最小单位格长度
+
+        /// <summary>
+        /// 安全的网格尺寸（下限 1）。<see cref="gridSize"/> 为 0 / 负值时，
+        /// 背景网格的行列数计算会发散、吸附会出现除零，故编辑器一律经此属性读取。
+        /// </summary>
+        public float GridSize => Mathf.Max(1f, gridSize);
 
         // 运行时查找缓存（O(1)）：仅在 Play 模式使用；编辑期走线性查找以实时反映编辑。
         // Dictionary 不可序列化，作为普通运行时字段存在（不占资产序列化）。
