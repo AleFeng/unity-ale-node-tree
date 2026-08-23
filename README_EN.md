@@ -57,6 +57,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 | --- | --- |
 | Single-asset config | One `NodeTreeData` holds all nodes, node types, status tags, and canvas layout; the editor works only on the ScriptableObject, fully Undo / Redo. |
 | Visual editor | Three-column layout + canvas drag / zoom / pan / connect; add/delete nodes, cut subtrees, auto-layout; IMGUI + GL draws 10 node shapes and straight / curve / polyline connections. |
+| Multi-selection & batch editing | Rubber-band **marquee select** on empty canvas (Shift adds, Ctrl toggles, live preview, Esc cancels); a **batch panel** edits node type / comment / icon / position and the common custom attributes across every selected node (`—` for mixed values; tag conditions require an explicit "apply to all selected"); **batch drag** preserves the relative layout and **batch delete** needs one confirmation and one Undo; toolbar **align / distribute** works on node centers (canvas Y points up). |
 | Extensible conditions | Each status tag's gate is a `ConditionExpression`; judgement is done by `IConditionEvaluator` (Toolkit `Ale.Condition`); built-in `NodeFinished` / `NodeUnlocked` / `NodeHasTag`, custom rules via a single interface. |
 | High-performance runtime UI | Object pooling per node type (via `com.ale.toolkit`), on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls. |
 | URP flowing lines | `NodeTree/NodeLineFlow` transparent flow shader (flow texture / edge fade / glow / HDR color); each connection (with its arrow) takes the line style of its child (target) node type. |
@@ -72,7 +73,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 | **Conditions & state** | Condition evaluation & extension | `ConditionExpression` (Toolkit), `INodeTreeStateSource`, `NodeFinishedEvaluator` / `NodeUnlockedEvaluator` / `NodeHasTagEvaluator` |
 | **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
 | **Runtime UI** | Node-tree presentation & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UIScrollingBackground`, `NodeLineBuilder` |
-| **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
+| **Editor** | Visual editing, multi-selection & batch editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 
 > See the [documentation](#-documentation) for each module's fields, API, and usage.
 

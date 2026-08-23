@@ -57,6 +57,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | --- | --- |
 | 单资产集中配置 | 一个 `NodeTreeData` 承载全部节点、节点类型、标签与画布布局；编辑器仅在 ScriptableObject 上工作，全程 Undo / Redo。 |
 | 可视化编辑器 | 三列布局 + 画布拖拽 / 连线；滚轮以光标为中心缩放、鼠标中键平移，底部常驻操作说明栏与空白处右键菜单（重置视口 / 显示全部节点 / 定位起始节点 / 就地新建节点 / 自动布局 / 吸附网格）；节点增删、子树切除、自动布局；IMGUI + GL 绘制 10 种节点形状与直线 / 曲线 / 折线连线。 |
+| 多选与批量编辑 | 空白拖拽**框选**（Shift 加选 / Ctrl 反选，实时预览、Esc 取消）；右侧**批量编辑面板**统一改节点类型 / 备注 / 图标 / 坐标与共有自定义属性（多值显示 `—`，标签条件需显式「应用到全部选中」）；**批量拖拽**保持相对布局、**批量删除**单次确认与单次 Undo；工具栏**对齐 / 等距分布**（按节点中心，画布 Y 轴向上）。 |
 | 可扩展条件系统 | 挂载条件用 `com.ale.toolkit` 的 `ConditionExpression` 描述，判定由 `IConditionEvaluator` 完成（打 `[ConditionEvaluator("Key")]` 自动注册）；内置「已完成 / 已解锁 / 是否挂某标签」，自定义规则一接口即可接入。 |
 | 高性能运行时 UI | 按节点类型对象池化（基于 `com.ale.toolkit`），视口裁剪按需 Spawn / Despawn，连线 Mesh 合批降 DrawCall。 |
 | URP 流光连线 | `NodeTree/NodeLineFlow` 透明流光 Shader（流动纹理 / 边缘渐变 / 辉光 / HDR 颜色），每条连线的样式取自其**子（目标）节点类型**。 |
@@ -72,7 +73,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | **条件与状态** | 挂载条件与判定 | `ConditionExpression`(Toolkit)、`INodeTreeStateSource`、`NodeTreeConditionContext`、内置判定器 `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
 | **存档** | 节点标签状态 | `NodeTreeSaveDataManager` |
 | **运行时 UI** | 节点树展示与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
-| **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
+| **编辑器** | 可视化编辑、多选与批量编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
 > 每个模块的字段、API 与用法见 [详细文档](#-详细文档)。
 
