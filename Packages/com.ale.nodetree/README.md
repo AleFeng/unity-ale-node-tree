@@ -110,6 +110,18 @@ node-tree 不再自研条件系统，而是**直接复用 `com.ale.toolkit`（1.
 - **条件上下文** `NodeTreeConditionContext : IConditionContext` —— 承载求值所需服务，判定器经 `ctx.GetService<INodeTreeStateSource>()` 取数据源。
 - **标签名常量** `NodeTreeTags.Unlock` / `NodeTreeTags.Finished`。
 
+### 让条件读到本插件之外的数据（1.5.1+）
+
+解锁条件常常要问别的系统：「在那个分支点选了第几项」「有没有那件道具」「第几天」。这类判定器取不到自己的数据源时一律 fail-closed 返回 `false`，表现为**条件永不成立且毫无征兆**。把宿主自己的 `IConditionContext` 交给 `NodeTreeSaveDataManager.ExternalServices` 即可打通——本插件只提供 `INodeTreeStateSource`，其余类型转问它：
+
+```csharp
+var context = new ConditionContext();                       // Ale.Condition，toolkit 提供
+context.RegisterService<IMyChoiceSource>(myChoiceSource);    // 一律按接口登记
+NodeTreeSaveDataManager.Instance.ExternalServices = context; // 默认 null，即与注入前完全一致
+```
+
+> ⚠️ **每次进入播放都要重新注入**：`NodeTreeSaveDataManager` 是静态单例，它在 `SubsystemRegistration` 时把自己整个置空（防止关闭 Domain Reload 时上一轮状态残留），注入的上下文一并蒸发。请在场景对象的 `Awake` 里注入——那时已晚于这次清空。
+
 **自定义判定器**（实现 `IConditionEvaluator` + 打特性即自动注册；经 `ctx.GetService<T>()` 读状态）：
 
 ```csharp

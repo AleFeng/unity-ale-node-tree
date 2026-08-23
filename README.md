@@ -152,6 +152,11 @@ bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
 // 存档往返（落盘交宿主）
 string json = save.Save();
 save.Load(json);
+
+// 条件要问本插件之外的数据（选了哪个选项 / 有没有那件道具 / 第几天）时，
+// 把宿主自己的条件上下文注入进来——取不到数据源的判定器一律 fail-closed 恒 false。
+// ⚠️ 静态单例在进入播放时会被清空，注入需放在场景对象的 Awake 里重做。
+save.ExternalServices = myConditionContext;   // 默认 null = 与注入前完全一致
 ```
 
 **5. 体验 Demo**

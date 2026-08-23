@@ -153,6 +153,12 @@ bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
 // Save round-trip (the host persists the string)
 string json = save.Save();
 save.Load(json);
+
+// When a condition needs data this package doesn't own (which option was taken,
+// whether an item is held, what day it is), inject your own condition context —
+// an evaluator that cannot reach its data source fails closed and never passes.
+// ⚠️ The static singleton is cleared when play mode starts; re-inject from Awake.
+save.ExternalServices = myConditionContext;   // defaults to null = previous behaviour
 ```
 
 **5. Try the Demo**

@@ -151,6 +151,12 @@ bool unlocked = save.HasTag("chapter_02", NodeTreeTags.Unlock);
 // セーブの往復（実際の永続化はホストに委譲）
 string json = save.Save();
 save.Load(json);
+
+// 本パッケージ外のデータ（どの選択肢を選んだか / アイテム所持 / 何日目か）を
+// 条件から参照したい場合は、ホスト側の条件コンテキストを注入します。
+// データソースを取得できない判定器は fail-closed で永久に成立しません。
+// ⚠️ 静的シングルトンは再生開始時にクリアされるため、Awake で再注入してください。
+save.ExternalServices = myConditionContext;   // 既定は null＝従来どおりの挙動
 ```
 
 > ⚠️ `autoRefresh` タグは条件が空の場合「通過（fail-open）」扱いです —— 開始 / ルートノードがこれで自動解放されるのは想定動作。非ルートノードには `Unlock` 条件を明示的に設定してください（未設定だと `RefreshAllNodeStates` が自動でタグを付与します）。

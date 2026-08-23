@@ -6,6 +6,25 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.5.1] - 2026-08-24
+
+条件求值可以取到本插件之外的数据源了。
+
+### 新增
+
+- **外部服务注入** `NodeTreeSaveDataManager.ExternalServices`（`IConditionContext`，默认 `null`）：`NodeTreeConditionContext.GetService<T>()` 现在是「本插件只答 `INodeTreeStateSource`，其余类型转问宿主」。此前它硬编码为 `_state as T`，宿主的判定器（「在那个分支点选了第几项」「有没有那件道具」）**永远取不到数据源**，一律 fail-closed 返回 `false` —— 条件永不成立，且没有任何征兆。默认 `null` 时行为与 1.5.0 完全一致。
+- `NodeTreeConditionContext` 构造函数新增可选参数 `IConditionContext fallback`。
+
+### 注意
+
+- ⚠️ **每次进入播放都要重新注入**：本类是静态单例，`ResetStatics`（`[RuntimeInitializeOnLoadMethod(SubsystemRegistration)]`）会把 `_instance` 整个置空以防跨播放残留，注入的上下文一并蒸发。请在场景对象的 `Awake` 里注入 —— 那时已晚于这次清空。
+- setter 内部会丢弃懒建的上下文缓存并重建，因此运行中换服务表即时生效；否则新注入会**静默不生效**。
+
+### API
+
+- `NodeTreeSaveDataManager` 新增：`public IConditionContext ExternalServices { get; set; }`。
+- `NodeTreeConditionContext` 新增构造重载：`NodeTreeConditionContext(INodeTreeStateSource state, object subject = null, IConditionContext fallback = null)`。
+
 ## [1.5.0] - 2026-08-23
 
 节点 UI 新增鼠标悬停高亮，并把「高亮开始 / 结束」开放为子类可重写的钩子。

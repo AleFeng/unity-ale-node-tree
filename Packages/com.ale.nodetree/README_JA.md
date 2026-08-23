@@ -108,7 +108,19 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 - **`NodeUnlockedEvaluator`**：キー `NodeTree.NodeUnlocked`、パラメータ `target` → `Unlock` タグが付いているか。
 - **`NodeHasTagEvaluator`**：キー `NodeTree.NodeHasTag`、パラメータ `target` + `tag` → 指定タグが付いているか。
 
-これら判定器はデータソースインタフェース **`INodeTreeStateSource { bool HasTag(string nodeId, string tag); }`**（セーブマネージャが実装）を通じて状態を照会します。上下文は **`NodeTreeConditionContext : IConditionContext`**、タグ名の定数は **`NodeTreeTags.Unlock` / `NodeTreeTags.Finished`**。
+これら判定器はデータソースインタフェース **`INodeTreeStateSource { bool HasTag(string nodeId, string tag); }`**（セーブマネージャが実装）を通じて状態を照会します。コンテキストは **`NodeTreeConditionContext : IConditionContext`**、タグ名の定数は **`NodeTreeTags.Unlock` / `NodeTreeTags.Finished`**。
+
+### 本パッケージ外のデータを参照する（1.5.1 以降）
+
+解放条件は他システムへの問い合わせを伴うことが多くあります（分岐でどの選択肢を選んだか、特定のアイテムを持っているか、何日目か）。データソースを取得できない判定器は fail-closed で `false` を返すため、**条件が永久に成立せず、しかも何の手掛かりも出ません**。ホスト側の `IConditionContext` を `NodeTreeSaveDataManager.ExternalServices` に渡してください。本パッケージは `INodeTreeStateSource` のみ自前で返し、それ以外の型はすべてそちらへ委譲します。
+
+```csharp
+var context = new ConditionContext();                        // Ale.Condition（toolkit 提供）
+context.RegisterService<IMyChoiceSource>(myChoiceSource);     // 必ずインタフェースで登録
+NodeTreeSaveDataManager.Instance.ExternalServices = context;  // 既定は null＝従来どおりの挙動
+```
+
+> ⚠️ **再生のたびに再注入が必要です。** `NodeTreeSaveDataManager` は静的シングルトンで、`SubsystemRegistration` のタイミングで自身を null に戻します（Domain Reload 無効時に前回の状態が残らないようにするため）。注入したコンテキストもそこで失われるので、シーン上のオブジェクトの `Awake`（このリセットより後に走ります）で注入してください。
 
 **カスタム判定器**（例：独自データソースを参照する条件）：
 

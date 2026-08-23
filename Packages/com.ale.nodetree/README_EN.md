@@ -105,6 +105,18 @@ Conditions are **not** a bespoke system anymore — node-tree wires directly int
 
 These evaluators read state through **`INodeTreeStateSource`** (`bool HasTag(string nodeId, string tag)`), implemented by the save manager and exposed via **`NodeTreeConditionContext : IConditionContext`**. Tag-name constants live in **`NodeTreeTags`** (`NodeTreeTags.Unlock` / `NodeTreeTags.Finished`).
 
+### Reaching data outside this package (1.5.1+)
+
+Unlock conditions often need to ask other systems: which option was taken at a branch point, whether an item is owned, what day it is. An evaluator that cannot reach its data source fails closed and returns `false` — the condition simply never passes, with no diagnostic. Hand your own `IConditionContext` to `NodeTreeSaveDataManager.ExternalServices`: this package keeps serving `INodeTreeStateSource` itself and forwards every other type to yours.
+
+```csharp
+var context = new ConditionContext();                        // Ale.Condition, from the toolkit
+context.RegisterService<IMyChoiceSource>(myChoiceSource);     // always register by interface
+NodeTreeSaveDataManager.Instance.ExternalServices = context;  // defaults to null = previous behaviour
+```
+
+> ⚠️ **Re-inject on every play session.** `NodeTreeSaveDataManager` is a static singleton that nulls itself at `SubsystemRegistration` (so state cannot leak across runs when Domain Reload is disabled) — your injected context goes with it. Inject from a scene object's `Awake`, which runs after that reset.
+
 **Custom evaluator** (e.g. unlock only when level is high enough):
 
 ```csharp
