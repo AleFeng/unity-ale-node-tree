@@ -196,6 +196,7 @@ namespace Ale.NodeTree.Editor
             _pendingCollapseNodeId = null;
             _nodeDragMoved         = false;
             _dragStartPositions.Clear();
+            _pendingDeleteIds.Clear();
             ClearMarqueeState();
         }
 
@@ -208,6 +209,18 @@ namespace Ale.NodeTree.Editor
             // Layout 事件时快照状态，防止 Repaint 时控件数量不一致
             if (Event.current.type == EventType.Layout)
             {
+                // 待执行的删除放在快照之前：本帧快照与后续绘制直接反映删除后的状态，
+                // 避免「面板画到一半数据没了」的控件数分歧。
+                if (_pendingDeleteIds.Count > 0)
+                {
+                    var ids = new List<string>(_pendingDeleteIds);
+                    _pendingDeleteIds.Clear();
+                    // 单节点沿用既有实现，完整保持它在多父 DAG 下「只提升到主父节点」的语义；
+                    // 两个及以上才走批量路径（二者的差异见 DeleteNodes 的说明）。
+                    if (ids.Count == 1) DeleteNode(ids[0]);
+                    else                DeleteNodes(ids);
+                }
+
                 _snapSelectedId         = _canvas.SelectedNodeId;
                 _snapSelectedIds.Clear();
                 foreach (var selId in _canvas.SelectedNodeIds) _snapSelectedIds.Add(selId);
@@ -1712,13 +1725,10 @@ namespace Ale.NodeTree.Editor
                             evt.Use();
                             Repaint();
                         }
-                        else if (!string.IsNullOrEmpty(_canvas.SelectedNodeId))
+                        else if (_canvas.SelectedCount > 0)
                         {
-                            // 删除选中的节点（二次确认）
-                            string nodeId = _canvas.SelectedNodeId;
-                            if (EditorUtility.DisplayDialog("删除节点",
-                                $"删除节点 [{nodeId}]？\n其子节点将提升到父节点下。", "删除", "取消"))
-                                DeleteNode(nodeId);
+                            // 删除全部选中节点（单次二次确认；实际删除延后到下一个 Layout）
+                            RequestDeleteSelection();
                             evt.Use();
                         }
                     }
@@ -1897,12 +1907,12 @@ namespace Ale.NodeTree.Editor
             });
             menu.AddItem(new GUIContent("在前方插入节点"), false, () => InsertNodeBefore(_ctxNodeId));
             menu.AddSeparator("");
-            menu.AddItem(new GUIContent("删除节点（子节点上移）"), false, () =>
-            {
-                if (EditorUtility.DisplayDialog("删除节点",
-                        $"删除节点 [{_ctxNodeId}]？\n其子节点将提升到父节点下。", "删除", "取消"))
-                    DeleteNode(_ctxNodeId);
-            });
+            // 右键命中的节点必定已在选中集内（见 DrawNodes 的右键分支），故直接删「当前选中」。
+            int selCount = _canvas.SelectedCount;
+            menu.AddItem(new GUIContent(selCount > 1
+                    ? $"删除选中的 {selCount} 个节点（子节点上移）"
+                    : "删除节点（子节点上移）"),
+                false, RequestDeleteSelection);
             menu.AddItem(new GUIContent("切除子树（含所有子节点）"), false, () =>
             {
                 if (EditorUtility.DisplayDialog("切除子树",
@@ -2071,6 +2081,136 @@ namespace Ale.NodeTree.Editor
         #endregion
 
         #region 删除 节点
+        // 待执行的删除。EditorUtility.DisplayDialog 会在 OnGUI 中途泵消息循环，并带着已变更的
+        // _config 返回；同一 pass 里后续面板会因节点已消失而少发控件，与本帧 Layout 不一致。
+        // 故触发时只登记 ID，实际删除延后到下一个 Layout 事件的开头统一执行。
+        private readonly List<string> _pendingDeleteIds = new List<string>();
+
+        /// <summary>
+        /// 请求删除当前全部选中节点：单次二次确认后登记待删列表，
+        /// 实际删除延后到下一个 Layout 事件开头（见 <see cref="_pendingDeleteIds"/>）。
+        /// </summary>
+        private void RequestDeleteSelection()
+        {
+            int count = _canvas.SelectedCount;
+            if (count == 0) return;
+
+            bool single = count == 1;
+            string title = single ? "删除节点" : "批量删除节点";
+            string message = single
+                ? $"删除节点 [{_canvas.SelectedNodeId}]？\n其子节点将提升到父节点下。"
+                : $"删除选中的 {count} 个节点？\n它们的子节点将提升到最近的存活父节点下。";
+            if (!EditorUtility.DisplayDialog(title, message, "删除", "取消")) return;
+
+            _pendingDeleteIds.Clear();
+            _pendingDeleteIds.AddRange(_canvas.SelectedNodeIds);
+            Repaint();
+        }
+
+        /// <summary>
+        /// 批量删除节点：单次 Undo，一次性完成父子提升与 Unlock 条件清理。
+        /// <para>不能循环调用 <see cref="DeleteNode"/> —— 它每次自带确认弹窗与 Undo 记录，
+        /// 且「先删父再删子」与「先删子再删父」会得到不同的提升结果（顺序依赖）。</para>
+        /// <para>被删集合内部的父子关系在此一次性解开：连续多层都被删时，
+        /// 存活的后代按原顺序提升到最近的存活祖先下。节点树至少保留一个节点。</para>
+        /// <para>与 <see cref="DeleteNode"/> 的一处语义差异：被删节点有多个父节点（多父 DAG）时，
+        /// 本方法把存活后代提升到<b>每一个</b>存活父节点下（每条路径都不断），
+        /// 而 <see cref="DeleteNode"/> 只提升到 <c>GetParentId</c> 返回的主父节点下。
+        /// 故单节点删除仍走 <see cref="DeleteNode"/>，行为保持不变。</para>
+        /// </summary>
+        private void DeleteNodes(IReadOnlyList<string> nodeIds)
+        {
+            if (!_config || nodeIds == null || nodeIds.Count == 0) return;
+
+            // 去重并剔除已不存在的 ID
+            var toDelete = new HashSet<string>();
+            foreach (var id in nodeIds)
+                if (!string.IsNullOrEmpty(id) && _config.GetNode(id) != null) toDelete.Add(id);
+            if (toDelete.Count == 0) return;
+
+            if (_config.nodes.Count - toDelete.Count < 1)
+            {
+                EditorUtility.DisplayDialog("无法删除", "节点树至少需要保留一个节点。", "确定");
+                return;
+            }
+
+            Undo.RecordObject(_config, toDelete.Count > 1 ? "批量删除节点" : "删除节点");
+
+            // 重建每个存活节点的子列表：被删的子节点原位替换为它自己的存活后代（可跨多层），顺序不变。
+            // 必须在从 nodes 移除之前做完，否则层级关系已断、无从推导提升目标。
+            var promotions = new List<KeyValuePair<string, string>>(); // (存活父 ID, 被提升的子 ID)
+            var visited    = new HashSet<string>();
+            foreach (var node in _config.nodes)
+            {
+                if (node?.childNodeIds == null || toDelete.Contains(node.nodeId)) continue;
+
+                bool hasDeleted = false;
+                foreach (var childId in node.childNodeIds)
+                    if (toDelete.Contains(childId)) { hasDeleted = true; break; }
+                if (!hasDeleted) continue;
+
+                var rebuilt = new List<string>(node.childNodeIds.Count);
+                foreach (var childId in node.childNodeIds)
+                {
+                    if (!toDelete.Contains(childId))
+                    {
+                        if (!rebuilt.Contains(childId)) rebuilt.Add(childId);
+                        continue;
+                    }
+                    visited.Clear();
+                    CollectSurvivingDescendants(childId, toDelete, visited, rebuilt, node.nodeId, promotions);
+                }
+                node.childNodeIds = rebuilt;
+            }
+
+            // 多父 DAG：移除所有节点中残留的（可能悬空的）被删引用
+            foreach (var n in _config.nodes)
+                n?.childNodeIds?.RemoveAll(id => toDelete.Contains(id));
+
+            _config.nodes.RemoveAll(n => n == null || toDelete.Contains(n.nodeId));
+
+            // 清理剩余节点 Unlock 条件中指向被删节点的 NodeFinished 项：引用已失效，
+            // 不清会让被提升的子节点因永远无法满足「已删节点已完成」而永久锁死。
+            foreach (var n in _config.nodes)
+                foreach (var deletedId in toDelete)
+                    RemoveUnlockFinishedItem(n, deletedId);
+
+            // 被提升的节点重接到存活父节点，保持解锁链；受「自动写入 Unlock 条件」开关控制
+            foreach (var kv in promotions)
+                AddUnlockFinishedItem(_config.GetNode(kv.Value), kv.Key);
+
+            foreach (var deletedId in toDelete)
+                _canvas.RemoveFromSelection(deletedId);
+
+            MarkDirty();
+        }
+
+        /// <summary>
+        /// 递归收集 <paramref name="deletedId"/> 之下最近一层的存活后代，按原顺序追加到
+        /// <paramref name="output"/>，并登记它们与存活父节点的提升关系。
+        /// 子节点同样在删除集内时继续下钻；<paramref name="visited"/> 防止环形引用无限递归。
+        /// </summary>
+        private void CollectSurvivingDescendants(string deletedId, HashSet<string> toDelete,
+            HashSet<string> visited, List<string> output, string survivingParentId,
+            List<KeyValuePair<string, string>> promotions)
+        {
+            if (!visited.Add(deletedId)) return;
+            var node = _config.GetNode(deletedId);
+            if (node?.childNodeIds == null) return;
+
+            foreach (var childId in node.childNodeIds)
+            {
+                if (toDelete.Contains(childId))
+                {
+                    CollectSurvivingDescendants(childId, toDelete, visited, output, survivingParentId, promotions);
+                    continue;
+                }
+                if (output.Contains(childId)) continue;
+                output.Add(childId);
+                promotions.Add(new KeyValuePair<string, string>(survivingParentId, childId));
+            }
+        }
+
         /// <summary>
         /// 删除 指定节点。
         /// 其直接子节点提升到父节点下（保持相对顺序）。
@@ -2344,7 +2484,7 @@ namespace Ale.NodeTree.Editor
             if (Event.current.type != EventType.Repaint) return;
 
             _operationHintContent ??= new GUIContent(
-                "中键：平移　·　滚轮：缩放　·　左键：选中（Shift 加选 / Ctrl 反选）　·　空白拖拽：框选　·　右键：节点 / 连线 / 画布 菜单");
+                "中键：平移　·　滚轮：缩放　·　左键：选中（Shift 加选 / Ctrl 反选）　·　空白拖拽：框选　·　Delete：删除选中　·　右键：菜单");
             var style = _operationHintStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
