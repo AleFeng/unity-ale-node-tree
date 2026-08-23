@@ -526,6 +526,9 @@ namespace Ale.NodeTree.Editor
 
                 GUILayout.FlexibleSpace();
 
+                // 对齐 / 分布（作用于当前选中的多个节点）
+                DrawAlignToolbar();
+
                 // 自动布局
                 if (_config)
                 {
@@ -534,6 +537,150 @@ namespace Ale.NodeTree.Editor
                 }
             }
         }
+
+        #region 对齐 / 分布
+        /// <summary>对齐与等距分布的方式。X 组作用于画布 X 轴，Y 组作用于画布 Y 轴。</summary>
+        private enum EAlignMode
+        {
+            LeftX       = 0, // 全部对齐到最小 x
+            CenterX     = 1, // 全部对齐到 x 跨度中点
+            RightX      = 2, // 全部对齐到最大 x
+            TopY        = 3, // 全部对齐到最大 y（画布 Y 轴向上，「上」= max）
+            CenterY     = 4, // 全部对齐到 y 跨度中点
+            BottomY     = 5, // 全部对齐到最小 y
+            DistributeX = 6, // X 轴等距
+            DistributeY = 7, // Y 轴等距
+        }
+
+        // 对齐 / 分布按钮文案（缓存 GUIContent，避免每帧重建）
+        private GUIContent[] _alignLabels;
+        private GUIContent   _alignGroupLabel;
+        private GUIContent   _distributeGroupLabel;
+
+        /// <summary>
+        /// 工具栏上的「对齐 / 分布」按钮组，作用于当前选中的节点。
+        /// <para>按钮<b>恒定绘制</b>，仅按 Layout 快照 <c>_snapMultiNodes</c> 的数量灰显 ——
+        /// 若按选中数决定「画不画」，控件数量会随选中变化而与本帧 Layout 不一致。</para>
+        /// <para>对齐一律按<b>节点中心</b>（<c>NodeData.position</c> 本身即中心），不提供边缘对齐。</para>
+        /// </summary>
+        private void DrawAlignToolbar()
+        {
+            _alignLabels ??= new[]
+            {
+                new GUIContent("左", "左对齐：全部选中节点的中心 X 对齐到最左者"),
+                new GUIContent("中", "水平居中：全部选中节点的中心 X 对齐到左右两端的中点"),
+                new GUIContent("右", "右对齐：全部选中节点的中心 X 对齐到最右者"),
+                new GUIContent("上", "上对齐：全部选中节点的中心 Y 对齐到最上者（画布 Y 轴向上）"),
+                new GUIContent("中", "垂直居中：全部选中节点的中心 Y 对齐到上下两端的中点"),
+                new GUIContent("下", "下对齐：全部选中节点的中心 Y 对齐到最下者（画布 Y 轴向上）"),
+                new GUIContent("横", "水平等距：两端节点不动，中间节点在 X 轴上均分间隔（需选中 3 个及以上）"),
+                new GUIContent("纵", "垂直等距：两端节点不动，中间节点在 Y 轴上均分间隔（需选中 3 个及以上）"),
+            };
+            _alignGroupLabel      ??= new GUIContent("对齐:", "作用于当前选中的多个节点，按节点中心对齐");
+            _distributeGroupLabel ??= new GUIContent("分布:", "在选中节点的当前跨度内等距排列，两端节点保持不动");
+
+            bool canAlign      = _snapMultiNodes.Count >= 2;
+            bool canDistribute = _snapMultiNodes.Count >= 3;
+
+            GUILayout.Label(_alignGroupLabel, GUILayout.Width(36f));
+            using (new EditorGUI.DisabledScope(!canAlign))
+            {
+                for (int i = 0; i < 3; i++)
+                    if (GUILayout.Button(_alignLabels[i], EditorStyles.toolbarButton, GUILayout.Width(24f)))
+                        AlignSelectedNodes((EAlignMode)i);
+                GUILayout.Space(4f);
+                for (int i = 3; i < 6; i++)
+                    if (GUILayout.Button(_alignLabels[i], EditorStyles.toolbarButton, GUILayout.Width(24f)))
+                        AlignSelectedNodes((EAlignMode)i);
+            }
+
+            GUILayout.Space(8f);
+            GUILayout.Label(_distributeGroupLabel, GUILayout.Width(36f));
+            using (new EditorGUI.DisabledScope(!canDistribute))
+            {
+                for (int i = 6; i < 8; i++)
+                    if (GUILayout.Button(_alignLabels[i], EditorStyles.toolbarButton, GUILayout.Width(24f)))
+                        AlignSelectedNodes((EAlignMode)i);
+            }
+            GUILayout.Space(8f);
+        }
+
+        /// <summary>
+        /// 按指定方式对齐 / 分布当前选中的节点（取 Layout 快照 <c>_snapMultiNodes</c>，
+        /// 与按钮的灰显条件同源，保证「按钮可点」与「确实有节点可动」一致）。
+        /// 一次操作一次 Undo；仅改变坐标，故 MarkDirty 跳过重名重扫。
+        /// </summary>
+        private void AlignSelectedNodes(EAlignMode mode)
+        {
+            bool distribute = mode == EAlignMode.DistributeX || mode == EAlignMode.DistributeY;
+            if (!_config || _snapMultiNodes.Count < (distribute ? 3 : 2)) return;
+
+            Undo.RecordObject(_config, distribute ? "等距分布节点" : "对齐节点");
+
+            if (distribute)
+            {
+                DistributeSelectedNodes(mode == EAlignMode.DistributeX);
+            }
+            else if (mode <= EAlignMode.RightX)
+            {
+                float min = float.MaxValue, max = float.MinValue;
+                foreach (var node in _snapMultiNodes)
+                {
+                    min = Mathf.Min(min, node.position.x);
+                    max = Mathf.Max(max, node.position.x);
+                }
+                float target = mode == EAlignMode.LeftX ? min
+                             : mode == EAlignMode.RightX ? max
+                             : (min + max) * 0.5f;
+                foreach (var node in _snapMultiNodes)
+                    node.position = new Vector2(target, node.position.y);
+            }
+            else
+            {
+                float min = float.MaxValue, max = float.MinValue;
+                foreach (var node in _snapMultiNodes)
+                {
+                    min = Mathf.Min(min, node.position.y);
+                    max = Mathf.Max(max, node.position.y);
+                }
+                // 画布 Y 轴向上：「上对齐」取最大 y，「下对齐」取最小 y —— 与屏幕直觉相反，勿颠倒
+                float target = mode == EAlignMode.TopY ? max
+                             : mode == EAlignMode.BottomY ? min
+                             : (min + max) * 0.5f;
+                foreach (var node in _snapMultiNodes)
+                    node.position = new Vector2(node.position.x, target);
+            }
+
+            MarkDirty(false); // 仅位置变化，跳过重名重扫
+            Repaint();
+        }
+
+        /// <summary>
+        /// 在选中节点当前跨度内等距分布：两端节点保持不动，中间节点按序均分间隔。
+        /// 先按该轴坐标排序再分配，因此不会打乱视觉上的先后关系。
+        /// </summary>
+        private void DistributeSelectedNodes(bool horizontal)
+        {
+            int count = _snapMultiNodes.Count;
+            if (count < 3) return;
+
+            var ordered = new List<NodeData>(_snapMultiNodes);
+            if (horizontal) ordered.Sort((a, b) => a.position.x.CompareTo(b.position.x));
+            else            ordered.Sort((a, b) => a.position.y.CompareTo(b.position.y));
+
+            float first = horizontal ? ordered[0].position.x : ordered[0].position.y;
+            float last  = horizontal ? ordered[count - 1].position.x : ordered[count - 1].position.y;
+            float step  = (last - first) / (count - 1);
+
+            for (int i = 1; i < count - 1; i++)
+            {
+                var p = ordered[i].position;
+                ordered[i].position = horizontal
+                    ? new Vector2(first + step * i, p.y)
+                    : new Vector2(p.x, first + step * i);
+            }
+        }
+        #endregion
 
         /// <summary>未加载配置文件时在画布区域居中显示提示信息。</summary>
         private void DrawNoConfigMessage()
