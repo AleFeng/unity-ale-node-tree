@@ -11,7 +11,7 @@ namespace Ale.NodeTree.Runtime
     /// 节点UI基类（MonoBehaviour + IPoolable）。
     /// 通过 ToolkitPool 管理生命周期，子类重写各虚方法实现具体UI逻辑。
     /// 功能：节点图标显示 / 节点名称·描述文本（toolkit AttributeValue.Text，本地化优先+纯文本回退）/
-    ///        鼠标悬停弹窗淡入淡出（基于 toolkit 中央 Tween）/ 鼠标点击回调。
+    ///        鼠标悬停弹窗淡入淡出 + 悬停高亮（均基于 toolkit 中央 Tween）/ 鼠标点击回调。
     /// </summary>
     public class UINodeBase : MonoBehaviour, IPoolable,
         IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
@@ -61,8 +61,10 @@ namespace Ale.NodeTree.Runtime
                     nodeDescText.text = data.nodeDesc != null ? data.nodeDesc.ResolveText() : string.Empty;
             }
             
-            // 重置 信息弹窗
+            // 重置 信息弹窗与高亮：首次从预制体实例化出来时，二者的视觉状态取自序列化值，
+            // 没有任何其它代码会把它们归零。
             ResetInfoPanel();
+            ResetHighlight();
         }
 
         /// <summary>
@@ -81,11 +83,24 @@ namespace Ale.NodeTree.Runtime
             // 复位选中态：节点可能在被选中时 despawn，归还前调用一次还原钩子，避免复用后残留高亮。
             OnNodeDeselected();
 
-            // 归还对象池前打断弹窗淡入淡出，避免对象复用时残留动画状态
-            _infoPanelFade.Kill();
-
-            // 重置 信息弹窗
+            // 重置 信息弹窗与高亮（二者内部各自打断在途补间）。
+            // 补间不随 GameObject 停用而停止，对象池又不做任何视觉复位，故必须在此显式还原。
             ResetInfoPanel();
+            ResetHighlight();
+        }
+
+        /// <summary>
+        /// 本物体停用时复位弹窗与高亮。
+        /// <para>必要性：面板整体 SetActive(false) 关闭时节点<b>不走</b>对象池归还，且悬停中的节点
+        /// 收不到 PointerExit（Unity 不向非激活对象派发），而 toolkit 的补间<b>不随 GameObject 停用而停止</b>
+        /// —— 不复位会让弹窗 / 高亮一路跑到全亮并把守卫位卡住，再次打开面板时常亮且不再响应悬停。</para>
+        /// <para>子类重写务必调用 <c>base.OnDisable()</c>。声明为 virtual 是因为 Unity 只调用最派生的
+        /// 同名方法，子类若自行写 <c>private void OnDisable()</c> 会静默吞掉本实现（有了 virtual 至少会触发 CS0114）。</para>
+        /// </summary>
+        protected virtual void OnDisable()
+        {
+            ResetInfoPanel();
+            ResetHighlight();
         }
         #endregion
         
@@ -108,6 +123,10 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         private void ResetInfoPanel()
         {
+            // 先打断在途补间：直接写 alpha 而不 Kill 的话，正在跑的淡入会把它推回去。
+            // 收在方法内部而不是各调用点，是因为本方法有三个调用点（绑定 / 解绑 / 停用）。
+            _infoPanelFade.Kill();
+
             if (infoPanel)
             {
                 infoPanel.alpha          = 0f;
@@ -149,6 +168,92 @@ namespace Ale.NodeTree.Runtime
         }
         #endregion
 
+        #region 悬停高亮
+        [Header("悬停高亮")]
+        [Tooltip("悬停时淡入的高亮层 Image（仅改其 color.a，不动 RGB）。为 null 时跳过高亮逻辑。\n" +
+                 "建议置于节点底板之上、图标与文字之下，并关闭其 Raycast Target。")]
+        [SerializeField] protected Image highlightImage;
+        [Tooltip("高亮完全显示时的不透明度，默认 1。")]
+        [Range(0f, 1f)]
+        [SerializeField] protected float highlightAlpha = 1f;
+        [Tooltip("高亮淡入时长（秒），默认 0.15。")]
+        [SerializeField] protected float highlightFadeInDuration  = 0.15f;
+        [Tooltip("高亮淡出时长（秒），默认 0.15。")]
+        [SerializeField] protected float highlightFadeOutDuration = 0.15f;
+
+        // 高亮淡入淡出句柄（基于 toolkit 中央 Tween），用于打断上一次动画。
+        private ToolkitTweenHandle _highlightFade;
+
+        /// <summary>
+        /// 当前是否处于高亮态。这是「期望状态」而非「补间是否在途」，供子类组合判断。
+        /// </summary>
+        protected bool IsHighlighted { get; private set; }
+
+        /// <summary>
+        /// 设置高亮态。悬停事件与外部调用（如「高亮某条路径上的全部节点」）共用这一个入口。
+        /// <para>设计约定：<b>状态在本方法维护，表现交给钩子</b> ——
+        /// 子类只需重写 <see cref="OnHighlightBegin"/> / <see cref="OnHighlightEnd"/>，
+        /// 不需要（也不应该）自行改动状态位。</para>
+        /// <para>同态重复调用直接忽略：对象池复用同一实例时，EventSystem 可能朝「已被复用为其它节点」
+        /// 的旧对象补发一次游离的 PointerExit，幂等判断可挡住这类误灭。</para>
+        /// </summary>
+        /// <param name="on">true = 进入高亮，false = 取消高亮。</param>
+        /// <param name="instant">true 时跳过补间、瞬间到位（复位路径使用）。</param>
+        public void SetHighlight(bool on, bool instant = false)
+        {
+            if (IsHighlighted == on) return;
+            IsHighlighted = on;
+
+            if (on) OnHighlightBegin(instant);
+            else    OnHighlightEnd(instant);
+        }
+
+        /// <summary>
+        /// 高亮开始。基类实现：把 <see cref="highlightImage"/> 的 alpha 淡入到 <see cref="highlightAlpha"/>。
+        /// <para>子类可重写以实现自定义表现（发光、缩放、粒子，或按解锁状态区别对待）。</para>
+        /// <para><b>务必尊重 <paramref name="instant"/></b>：为 true 时必须瞬间到位、不得留下在途补间 ——
+        /// 该路径用于对象池归还与停用时的复位，而补间不随 GameObject 停用而停止，
+        /// 残留的补间会渗进下一次复用（表现为「另一个节点莫名其妙亮着」）。</para>
+        /// </summary>
+        /// <param name="instant">true = 瞬间到位，不播放补间。</param>
+        protected virtual void OnHighlightBegin(bool instant)
+        {
+            if (!highlightImage) return;
+
+            _highlightFade.Kill();
+            _highlightFade = ToolkitTween.FadeGraphic(
+                highlightImage, highlightAlpha,
+                instant ? 0f : highlightFadeInDuration, EToolkitEase.OutQuad);
+        }
+
+        /// <summary>
+        /// 高亮结束。基类实现：把 <see cref="highlightImage"/> 的 alpha 淡出到 0。
+        /// 子类重写时的注意事项同 <see cref="OnHighlightBegin"/>。
+        /// </summary>
+        /// <param name="instant">true = 瞬间到位，不播放补间。</param>
+        protected virtual void OnHighlightEnd(bool instant)
+        {
+            if (!highlightImage) return;
+
+            _highlightFade.Kill();
+            _highlightFade = ToolkitTween.FadeGraphic(
+                highlightImage, 0f,
+                instant ? 0f : highlightFadeOutDuration, EToolkitEase.InQuad);
+        }
+
+        /// <summary>
+        /// 强制复位高亮：打断补间并瞬间还原到常态。
+        /// 不经 <see cref="SetHighlight"/> —— 首次从预制体实例化出来时 alpha 取自序列化值、
+        /// 而状态位本就是 false，走幂等判断会被直接跳过。
+        /// </summary>
+        private void ResetHighlight()
+        {
+            _highlightFade.Kill();
+            IsHighlighted = false;
+            OnHighlightEnd(instant: true);
+        }
+        #endregion
+
         #region 交互操作
         /// <summary>节点被选中时调用，子类可重写以实现高亮、缩放等视觉反馈。</summary>
         public virtual void OnNodeSelected() { }
@@ -165,29 +270,29 @@ namespace Ale.NodeTree.Runtime
             => OnPointerExitNode();
 
         /// <summary>
-        /// 鼠标悬停开始时调用：弹窗淡入（带缓动，基于 toolkit 中央 Tween）。
-        /// 子类可重写以实现自定义悬停效果（如放大、发光等），建议调用 base.OnPointerEnterNode()
-        /// 以保持弹窗淡入行为，或完全自定义。
+        /// 鼠标悬停开始时调用：弹窗淡入 + 进入高亮态（均带缓动，基于 toolkit 中央 Tween）。
+        /// 子类若只想改高亮表现，重写 <see cref="OnHighlightBegin"/> 即可，无需重写本方法；
+        /// 确需重写本方法时建议调用 base.OnPointerEnterNode() 以保留弹窗与高亮，或完全自定义。
         /// </summary>
         public virtual void OnPointerEnterNode()
         {
-            if (!infoPanel) return;
+            // 弹窗与高亮相互独立：未配置弹窗的节点同样应当获得高亮，故不在此提前 return
+            if (infoPanel) InfoPanelFadeIn();
 
-            // 淡入弹窗
-            InfoPanelFadeIn();
+            SetHighlight(true);
         }
 
         /// <summary>
-        /// 鼠标悬停结束时调用：弹窗淡出（带缓动，基于 toolkit 中央 Tween）。
-        /// 子类可重写以实现自定义淡出效果，建议调用 base.OnPointerExitNode()
-        /// 以保持弹窗淡出行为，或完全自定义。
+        /// 鼠标悬停结束时调用：弹窗淡出 + 退出高亮态（均带缓动，基于 toolkit 中央 Tween）。
+        /// 子类若只想改高亮表现，重写 <see cref="OnHighlightEnd"/> 即可，无需重写本方法；
+        /// 确需重写本方法时建议调用 base.OnPointerExitNode() 以保留弹窗与高亮，或完全自定义。
         /// </summary>
         public virtual void OnPointerExitNode()
         {
-            if (!infoPanel) return;
+            // 与 OnPointerEnterNode 对称：不因未配置弹窗而跳过高亮
+            if (infoPanel) InfoPanelFadeOut();
 
-            // 淡出弹窗
-            InfoPanelFadeOut();
+            SetHighlight(false);
         }
 
         // ── IPointerClickHandler（鼠标点击）──
