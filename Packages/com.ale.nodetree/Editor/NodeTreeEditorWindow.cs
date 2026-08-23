@@ -1717,7 +1717,8 @@ namespace Ale.NodeTree.Editor
         /// 滚轮以光标为中心缩放，中键拖拽平移，
         /// 左键在空白处按下并拖拽进行框选（位移不足阈值时退化为「点击空白取消选中」），
         /// 左键拖拽节点移动节点（多选时全部选中节点按同一位移整体跟随），
-        /// 左键释放结束拖拽 / 提交框选，右键空白弹出画布菜单。
+        /// 左键释放结束拖拽 / 提交框选，右键空白弹出画布菜单，
+        /// 方向键按网格步长移动全部选中节点。
         /// </summary>
         private void HandleCanvasInput(Rect canvasRect)
         {
@@ -1911,8 +1912,70 @@ namespace Ale.NodeTree.Editor
                             evt.Use();
                         }
                     }
+                    // 方向键：按网格步长移动全部选中节点。
+                    // 正在编辑文本框时让给文本框 —— 本方法在 DrawRightPanel 之前执行，
+                    // 若无条件消费，右侧面板输入框内的光标就再也移不动了。
+                    else if (!_isAddingConnection && IsArrowKey(evt.keyCode)
+                             && _canvas.SelectedCount > 0 && !EditorGUIUtility.editingTextField)
+                    {
+                        MoveSelectionByArrow(evt.keyCode);
+                        evt.Use();
+                    }
                     break;
             }
+        }
+
+        /// <summary>是否为四个方向键之一。</summary>
+        private static bool IsArrowKey(KeyCode key)
+            => key == KeyCode.LeftArrow || key == KeyCode.RightArrow
+            || key == KeyCode.UpArrow   || key == KeyCode.DownArrow;
+
+        /// <summary>
+        /// 方向键移动全部选中节点，步长为网格的最小单位格长度（<see cref="GridSpacing"/>）。
+        /// <para>开启「吸附网格」时移动到该方向上的<b>下一条网格线</b> —— 节点若不在网格交叉点上，
+        /// 这一次按键只走到最近的那条线（即「先对齐」），再按才走整格；关闭时单纯 ± 一格。</para>
+        /// <para>位移按<b>主选中节点</b>计算一次再整体施加，与批量拖拽同源：
+        /// 逐节点各自对齐会把原本不在网格上的节点互相拉拢，破坏选中集的相对布局。</para>
+        /// <para>画布 Y 轴向上，故 ↑ 增大 y、↓ 减小 y —— 与屏幕直觉相反，勿颠倒。</para>
+        /// </summary>
+        private void MoveSelectionByArrow(KeyCode key)
+        {
+            if (!_config) return;
+            var primary = _config.GetNode(_canvas.SelectedNodeId);
+            if (primary == null) return;
+
+            bool  horizontal = key == KeyCode.LeftArrow || key == KeyCode.RightArrow;
+            int   dir        = (key == KeyCode.RightArrow || key == KeyCode.UpArrow) ? 1 : -1;
+            float grid       = GridSpacing;
+            float cur        = horizontal ? primary.position.x : primary.position.y;
+            float target     = _snapToGrid ? NextGridLine(cur, grid, dir) : cur + grid * dir;
+
+            var delta = horizontal ? new Vector2(target - cur, 0f) : new Vector2(0f, target - cur);
+            if (delta == Vector2.zero) return;
+
+            Undo.RecordObject(_config, "移动节点");
+            foreach (var nodeId in _canvas.SelectedNodeIds)
+            {
+                var node = _config.GetNode(nodeId);
+                if (node != null) node.position += delta;
+            }
+            MarkDirty(false); // 仅位置变化，跳过重名重扫
+            Repaint();
+        }
+
+        /// <summary>
+        /// 取 <paramref name="value"/> 在 <paramref name="dir"/>（+1 / -1）方向上的下一条网格线。
+        /// 已落在网格线上时走整格，不在则只走到最近的那条线。
+        /// 容差用于抵消浮点误差 —— 否则 value 恰在网格上时 value / grid 可能算成 19.999999，
+        /// 取整后会少走一格。
+        /// </summary>
+        private static float NextGridLine(float value, float grid, int dir)
+        {
+            const float eps = 1e-4f;
+            float k = value / grid;
+            return dir > 0
+                ? (Mathf.Floor(k + eps) + 1f) * grid
+                : (Mathf.Ceil(k - eps) - 1f) * grid;
         }
 
         /// <summary>
@@ -2663,7 +2726,7 @@ namespace Ale.NodeTree.Editor
             if (Event.current.type != EventType.Repaint) return;
 
             _operationHintContent ??= new GUIContent(
-                "中键：平移　·　滚轮：缩放　·　左键：选中（Shift 加选 / Ctrl 反选）　·　空白拖拽：框选　·　Delete：删除选中　·　右键：菜单");
+                "中键：平移　·　滚轮：缩放　·　左键：选中（Shift 加选 / Ctrl 反选）　·　空白拖拽：框选　·　方向键：移动　·　Delete：删除　·　右键：菜单");
             var style = _operationHintStyle ??= new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
