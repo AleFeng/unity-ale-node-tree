@@ -714,7 +714,7 @@ namespace Ale.NodeTree.Runtime
                 Vector3 local = new Vector3(node.position.x + _nodePositionOffset.x,
                                             node.position.y + _nodePositionOffset.y, 0f);
                 Vector3 world = _nodeContainer.TransformPoint(local);
-                Vector2 sp    = cullCam ? (Vector2)cullCam.WorldToScreenPoint(world)
+                Vector2 sp    = cullCam ? cullCam.WorldToScreenPoint(world)
                                         : new Vector2(world.x, world.y);
 
                 // 节点半尺寸（随容器缩放）转屏幕像素，做包围盒判定而非仅中心，避免大节点边缘尚在屏内即被误剔。

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Ale.Condition;
 using UnityEngine;
 
 namespace Ale.NodeTree.Runtime
@@ -11,6 +12,8 @@ namespace Ale.NodeTree.Runtime
     /// 或用 Save/Load 进行 JSON 序列化；实际持久化（磁盘 / PlayerPrefs）由宿主负责。
     /// <para>实现 <see cref="INodeTreeStateSource"/>，供条件系统（<c>NodeTree.NodeFinished</c> /
     /// <c>NodeTree.NodeUnlocked</c> 等判定器）读取节点标签。</para>
+    /// <para>解锁条件要问本包之外的系统时，把宿主的服务上下文赋给
+    /// <see cref="ExternalServices"/>。</para>
     /// </summary>
     public class NodeTreeSaveDataManager : INodeTreeStateSource
     {
@@ -51,7 +54,33 @@ namespace Ale.NodeTree.Runtime
 
         // 条件求值上下文（懒建）：把本管理器作为 INodeTreeStateSource 暴露给判定器。
         private NodeTreeConditionContext _context;
-        private NodeTreeConditionContext Context => _context ??= new NodeTreeConditionContext(this);
+        private NodeTreeConditionContext Context
+            => _context ??= new NodeTreeConditionContext(this, null, _externalServices);
+
+        private IConditionContext _externalServices;
+
+        /// <summary>
+        /// 宿主注入的<b>外部服务上下文</b>：本包提供不了的服务（<see cref="INodeTreeStateSource"/> 之外的）
+        /// 由它接管。默认 <c>null</c>，即行为与注入前完全一致。
+        ///
+        /// <para><b>为什么需要它</b>：节点的解锁条件常常要问别的系统——「在某个分支选了第几项」
+        /// 「有没有那件道具」「第几天」。这类判定器取不到自己的数据源时一律 fail-closed 返回 false，
+        /// 表现为<b>条件永不成立且毫无征兆</b>。把宿主自己的 <see cref="IConditionContext"/>
+        /// （如 Toolkit 的 <c>ConditionContext</c>，按接口登记好各服务）赋给本属性即可打通。</para>
+        ///
+        /// <para>⚠️ <b>进 Play 会被清空</b>：本类是静态单例，<c>ResetStatics</c> 在
+        /// <c>SubsystemRegistration</c> 时把 <c>_instance</c> 整个置空，注入的上下文一并蒸发。
+        /// 宿主必须在每次进入播放后重新注入，且要早于第一次条件求值。</para>
+        /// </summary>
+        public IConditionContext ExternalServices
+        {
+            get => _externalServices;
+            set
+            {
+                _externalServices = value;
+                _context = null;   // 上下文是懒建缓存，换了服务必须丢弃重建，否则新注入静默不生效
+            }
+        }
 
         // ── 通用标签查询 / 修改 ──────────────────────────────────────────────────
 
