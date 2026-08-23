@@ -551,11 +551,32 @@ namespace Ale.NodeTree.Editor
         ///   Curve    ── 贝塞尔终点切线 = (to − cp2).normalized，cp2 与 DrawBezierGL 完全一致
         ///   Polyline ── 最后一段 mid2→to 的方向，mid2 与 DrawPolylineGL 完全一致
         /// </summary>
+        /// <summary>
+        /// 兼容重载：以圆形半径（各向同性）计算箭头端点，等价于 <c>halfSize = (radius, radius)</c>。
+        /// </summary>
         public static void GetArrowTipAndDir(
             Vector2 from, Vector2 to,
             LineTypeData lineStyle,
             ELayoutDirection dir,
             float radius,
+            out Vector2 arrowTip,
+            out Vector2 arrowDir)
+            => GetArrowTipAndDir(from, to, lineStyle, dir,
+                                 new Vector2(radius, radius), out arrowTip, out arrowDir);
+
+        /// <summary>
+        /// 计算箭头尖端位置与朝向：尖端 = 子节点中心沿「到达方向」回退到节点边缘。
+        /// <para>回退距离按 <paramref name="halfSize"/> 为半轴的<b>内切椭圆</b>沿到达方向求交得到，
+        /// 因此 X / Y 任一方向的节点尺寸变化都会让箭头跟随移动。
+        /// 旧实现用 <c>Min(w, h) * 0.5</c> 的内切圆半径，X 放大时会被 Y 钳住、箭头不动。</para>
+        /// <para>非圆形形状（方形 / 多边形等）在斜向连线上箭头会略微内缩 —— 内切椭圆是对各形状
+        /// 外缘的统一近似；正交方向（各布局方向的主轴）上与外缘精确对齐。</para>
+        /// </summary>
+        public static void GetArrowTipAndDir(
+            Vector2 from, Vector2 to,
+            LineTypeData lineStyle,
+            ELayoutDirection dir,
+            Vector2 halfSize,
             out Vector2 arrowTip,
             out Vector2 arrowDir)
         {
@@ -617,7 +638,22 @@ namespace Ale.NodeTree.Editor
             }
 
             arrowDir = approachDir;
-            arrowTip = to - approachDir * radius;
+            arrowTip = to - approachDir * EdgeDistanceAlong(approachDir, halfSize);
+        }
+
+        /// <summary>
+        /// 从节点中心沿 <paramref name="dir"/>（单位向量）到「以 <paramref name="halfSize"/> 为半轴的
+        /// 内切椭圆」边界的距离：解 (t·dx/rx)² + (t·dy/ry)² = 1，得 t = 1 / √((dx/rx)² + (dy/ry)²)。
+        /// 半轴为圆时（rx == ry）退化为该圆半径，与旧行为一致。
+        /// </summary>
+        private static float EdgeDistanceAlong(Vector2 dir, Vector2 halfSize)
+        {
+            float rx = Mathf.Max(0.01f, halfSize.x);
+            float ry = Mathf.Max(0.01f, halfSize.y);
+            float nx = dir.x / rx;
+            float ny = dir.y / ry;
+            float d  = Mathf.Sqrt(nx * nx + ny * ny);
+            return d > 1e-6f ? 1f / d : Mathf.Min(rx, ry); // 退化保护：方向为零向量
         }
 
         // ── 连线批量绘制（由编辑器窗口调用）──
@@ -703,11 +739,12 @@ namespace Ale.NodeTree.Editor
                                               childType.color.b * 0.8f, 1f);
                     float arrowSize = Mathf.Max(childType.line.lineWidth * 2.5f * canvas.Zoom, 8f);
 
-                    Vector2 childSz   = childType.resolution;
-                    float childRadius = Mathf.Min(childSz.x, childSz.y) * 0.5f * canvas.Zoom;
+                    // 各向异性半轴（含缩放）：X / Y 任一方向的节点尺寸变化都会反映到箭头位置上。
+                    // 旧写法取 Min(w, h) 的内切圆半径，X 放大时会被 Y 钳住而不动。
+                    Vector2 childHalf = childType.resolution * 0.5f * canvas.Zoom;
 
                     GetArrowTipAndDir(fromScreen, toScreen,
-                        childType.line, config.layoutDirection, childRadius,
+                        childType.line, config.layoutDirection, childHalf,
                         out var arrowTip, out var arrowDir);
 
                     var arrowBounds = new Rect(arrowTip.x - arrowSize, arrowTip.y - arrowSize,
