@@ -72,7 +72,7 @@ Many games need a "nodes + connections + unlock conditions" tree — skill trees
 | **Data** | Node / type / line / tag / tag rule | `NodeData`, `NodeTypeData`, `LineTypeData`, `NodeTagData`, `NodeTagRule` |
 | **Conditions & state** | Condition evaluation & extension | `ConditionExpression` (Toolkit), `INodeTreeStateSource`, `NodeFinishedEvaluator` / `NodeUnlockedEvaluator` / `NodeHasTagEvaluator` |
 | **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
-| **Runtime UI** | Node-tree presentation & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UIScrollingBackground`, `NodeLineBuilder` |
+| **Runtime UI** | Node-tree presentation, hover highlight & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UIScrollingBackground`, `NodeLineBuilder` |
 | **Editor** | Visual editing, multi-selection & batch editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 
 > See the [documentation](#-documentation) for each module's fields, API, and usage.

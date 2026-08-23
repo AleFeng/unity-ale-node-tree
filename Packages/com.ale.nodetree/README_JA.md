@@ -25,7 +25,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 | **データ** | ノード / タイプ / 状態タグ / カスタム属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件** | Toolkit 条件システムへの接続 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、判定器（`NodeFinishedEvaluator` / `NodeUnlockedEvaluator` / `NodeHasTagEvaluator`） |
 | **セーブ** | ノードごとのタグ状態 | `NodeTreeSaveDataManager` |
-| **ランタイム UI** | ノードツリー表示と無限スクロール背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **ランタイム UI** | ノードツリー表示・ホバーハイライト・無限スクロール背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **エディタ** | ビジュアル編集 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **シェーダー** | 流光ライン | `NodeTree/NodeLineFlow` |
 
@@ -169,15 +169,34 @@ save.Load(json);
 
 ### `UINodeBase`
 
-ノード UI 基底クラス（`MonoBehaviour` + `IPoolable` + ポインタイベント）。ノード UI プレハブにアタッチし、`UINodeTreeWindow` がプール経由で生成・バインドします。機能：ノードアイコン表示、名前 / 説明テキスト（`AttributeValue.ResolveText()` で解決し `TMP_Text` に反映）、マウスホバー時の情報ポップアップのフェード（`com.ale.toolkit` の中央 Tween ベース）、クリックコールバック。
+ノード UI 基底クラス（`MonoBehaviour` + `IPoolable` + ポインタイベント）。ノード UI プレハブにアタッチし、`UINodeTreeWindow` がプール経由で生成・バインドします。機能：ノードアイコン表示、名前 / 説明テキスト（`AttributeValue.ResolveText()` で解決し `TMP_Text` に反映）、マウスホバー時の情報ポップアップのフェードと**ホバーハイライト**（いずれも `com.ale.toolkit` の中央 Tween ベース）、クリックコールバック。
 
 **オーバーライド可能な仮想メソッド / イベント**：
 
 - `OnBindData(NodeData data, NodeTypeData type)` / `OnUnbindData()` —— データのバインド / アンバインド（`OnDespawn` で自動アンバインド）。
 - `OnNodeSelected()` / `OnNodeDeselected()` —— 選択 / 選択解除の視覚フィードバック。
-- `OnPointerEnterNode()` / `OnPointerExitNode()` —— ホバーポップアップのフェードイン / アウト。
+- `OnPointerEnterNode()` / `OnPointerExitNode()` —— ホバー：ポップアップのフェードイン / アウトに加え、ハイライト状態への出入り。
+- `SetHighlight(bool on, bool instant = false)`（非仮想・唯一の書き込み入口）+ `OnHighlightBegin(bool instant)` / `OnHighlightEnd(bool instant)`（`protected virtual` フック）+ `IsHighlighted` —— **ホバーハイライト**。基底実装は `highlightImage` の alpha を `0` と `highlightAlpha` の間でフェードします。**状態は `SetHighlight` が持ち、見た目はフック側**なので、サブクラスはフックだけをオーバーライドすれば済みます。`SetHighlight` は外部からも呼べます（「あるパス上の全ノードをハイライト」など）。
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` —— クリックコールバック（イベント購読、またはサブクラスでオーバーライドして SE / ダイアログ / ストーリーなどを発火）。
 - `OnSpawn()` / `OnDespawn()` —— `IPoolable` プールコールバック（`OnDespawn` → 自動 `OnUnbindData`。再利用時に古い状態が残らない）。
+- `OnDisable()`（`protected virtual`）—— 非アクティブ化時にポップアップとハイライトを復帰。サブクラスでオーバーライドする場合は必ず `base.OnDisable()` を呼んでください。
+
+**ハイライト層のプレハブ設定**：`highlightImage` はノード土台の上、アイコン・テキストの下に置き、stretch で全面に広げ、初期 `alpha = 0`、そして **Raycast Target をオフ**にしてください —— alpha が 0 の `Image` でもレイキャストは遮ります（`Image.IsRaycastLocationValid` は既定で `color.a` を見ません）。ハイライト層が外側にはみ出すと隣接ノードのホバーとクリックを奪ってしまいます。デモの 2 つのノードプレハブは各自の土台と同じ sprite を流用しているため、ハイライトの形状が自然にノードと一致します。
+
+**サブクラス実装時の注意**：
+
+- **`instant` を必ず尊重すること**：`true` のときは即座に反映し、進行中の Tween を残してはいけません —— このパスはオブジェクトプールへの返却時と非アクティブ化時の復帰に使われ、toolkit の Tween は **GameObject の非アクティブ化では停止しません**。残った Tween は次の再利用に染み出します（「無関係なノードがなぜか光っている」という症状）。
+- Tween の既定は `unscaled = true`（`Time.timeScale = 0` でも進行）。ノードツリーのパネルは通常ポーズ画面から開くため、`false` に変えないでください。
+- 典型的な使い方 —— 未解放ノードはハイライトしない：
+
+```csharp
+protected override void OnHighlightBegin(bool instant)
+{
+    if (nodeData == null) return;
+    if (!NodeTreeSaveDataManager.HasTag(nodeData.nodeId, NodeTreeTags.Unlock)) return;
+    base.OnHighlightBegin(instant);   // 解放済みのみ基底のフェードを実行
+}
+```
 
 ### `UIScrollingBackground`
 

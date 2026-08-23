@@ -25,7 +25,7 @@ A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeD
 | **Data** | Node / type / state tags / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `NodeTagData`, `NodeTagRule` |
 | **Conditions** | node-tree condition wiring (into toolkit `Ale.Condition`) | `INodeTreeStateSource`, `NodeTreeConditionContext`, `NodeTreeTags`; evaluators `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
 | **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
-| **Runtime UI** | Node-tree presentation & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UIScrollingBackground`, `NodeLineBuilder` |
+| **Runtime UI** | Node-tree presentation, hover highlight & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UIScrollingBackground`, `NodeLineBuilder` |
 | **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 | **Shader** | Flowing line | `NodeTree/NodeLineFlow` |
 
@@ -173,15 +173,34 @@ The runtime node-tree UI window (a standalone `MonoBehaviour`). Attach it to a U
 
 ### `UINodeBase`
 
-The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach it to node UI prefabs; `UINodeTreeWindow` spawns and binds them through the pool. Features: node icon display, name / description text (resolved via `AttributeValue.ResolveText()` into `TMP_Text`), hover info-popup fade in/out (via `com.ale.toolkit`'s central tween), and a click callback.
+The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach it to node UI prefabs; `UINodeTreeWindow` spawns and binds them through the pool. Features: node icon display, name / description text (resolved via `AttributeValue.ResolveText()` into `TMP_Text`), hover info-popup fade in/out **and hover highlight** (both via `com.ale.toolkit`'s central tween), and a click callback.
 
 **Overridable virtuals & events**:
 
 - `OnBindData(NodeData data, NodeTypeData type)` / `OnUnbindData()` — bind / unbind data (`OnDespawn` unbinds automatically).
 - `OnNodeSelected()` / `OnNodeDeselected()` — visual feedback for select / deselect.
-- `OnPointerEnterNode()` / `OnPointerExitNode()` — hover popup fade in / out.
+- `OnPointerEnterNode()` / `OnPointerExitNode()` — hover: popup fade in / out, plus entering / leaving the highlight state.
+- `SetHighlight(bool on, bool instant = false)` (non-virtual, the single write entry) + `OnHighlightBegin(bool instant)` / `OnHighlightEnd(bool instant)` (`protected virtual` hooks) + `IsHighlighted` — **hover highlight**. The base implementation fades `highlightImage`'s alpha between `0` and `highlightAlpha`; **state lives in `SetHighlight`, appearance lives in the hooks**, so a subclass only overrides the hooks. `SetHighlight` can also be driven externally (e.g. "highlight every node along a path").
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` — click callback (subscribe to the event, or override in a subclass to trigger SFX / dialogue / story, etc.).
 - `OnSpawn()` / `OnDespawn()` — `IPoolable` pool callbacks (`OnDespawn` → auto `OnUnbindData`, so reused instances carry no stale state).
+- `OnDisable()` (`protected virtual`) — resets popup and highlight when the object is deactivated; a subclass override must call `base.OnDisable()`.
+
+**Highlight layer prefab setup**: place `highlightImage` above the node backplate but below the icon and text, stretched to fill, with an initial `alpha = 0`, and **turn Raycast Target off** — an `Image` with alpha 0 still blocks raycasts (`Image.IsRaycastLocationValid` ignores `color.a` by default), so an oversized highlight layer would steal hover and clicks from neighbouring nodes. The two demo node prefabs simply reuse their own backplate sprite, so the highlight shape matches each node for free.
+
+**Notes for subclasses**:
+
+- **Always honour the `instant` parameter**: when `true` the change must be immediate and leave no running tween — that path is used by pool release and deactivation resets, and toolkit tweens **do not stop when a GameObject is deactivated**, so a leftover tween bleeds into the next reuse (showing up as "some unrelated node is glowing").
+- Tweens default to `unscaled = true` (they keep running at `Time.timeScale = 0`). Node-tree panels are usually opened from a pause screen, so do not switch this to `false`.
+- Typical use — do not highlight locked nodes:
+
+```csharp
+protected override void OnHighlightBegin(bool instant)
+{
+    if (nodeData == null) return;
+    if (!NodeTreeSaveDataManager.HasTag(nodeData.nodeId, NodeTreeTags.Unlock)) return;
+    base.OnHighlightBegin(instant);   // only unlocked nodes get the base fade
+}
+```
 
 ### `UIScrollingBackground`
 

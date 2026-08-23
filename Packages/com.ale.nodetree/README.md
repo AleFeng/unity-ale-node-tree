@@ -25,7 +25,7 @@
 | **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件** | 接入 Toolkit `Ale.Condition` 与内置判定器 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、`NodeFinishedEvaluator`、`NodeUnlockedEvaluator`、`NodeHasTagEvaluator` |
 | **存档** | 节点状态标签 | `NodeTreeSaveDataManager` |
-| **运行时 UI** | 节点树展示与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **运行时 UI** | 节点树展示、悬停高亮与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **Shader** | 流光连线 | `NodeTree/NodeLineFlow` |
 
@@ -170,15 +170,34 @@ save.Load(json);
 
 ### `UINodeBase`
 
-节点 UI 基类（`MonoBehaviour` + `IPoolable` + 指针事件）。挂到节点 UI 预制体上，由 `UINodeTreeWindow` 通过对象池生成并绑定数据。功能：节点图标显示、名称 / 描述文本（`AttributeValue.ResolveText()` 解析，填充 `TMP_Text`）、鼠标悬停信息弹窗淡入淡出（基于 `com.ale.toolkit` 中央 Tween）、点击回调。
+节点 UI 基类（`MonoBehaviour` + `IPoolable` + 指针事件）。挂到节点 UI 预制体上，由 `UINodeTreeWindow` 通过对象池生成并绑定数据。功能：节点图标显示、名称 / 描述文本（`AttributeValue.ResolveText()` 解析，填充 `TMP_Text`）、鼠标悬停信息弹窗淡入淡出与**悬停高亮**（均基于 `com.ale.toolkit` 中央 Tween）、点击回调。
 
 **可重写虚方法与事件**：
 
 - `OnBindData(NodeData data, NodeTypeData type)` / `OnUnbindData()` —— 绑定 / 解绑数据（`OnDespawn` 自动解绑）。
 - `OnNodeSelected()` / `OnNodeDeselected()` —— 选中 / 取消选中的视觉反馈。
-- `OnPointerEnterNode()` / `OnPointerExitNode()` —— 悬停弹窗淡入 / 淡出。
+- `OnPointerEnterNode()` / `OnPointerExitNode()` —— 悬停：弹窗淡入 / 淡出，并进入 / 退出高亮态。
+- `SetHighlight(bool on, bool instant = false)`（非虚，唯一写入口）+ `OnHighlightBegin(bool instant)` / `OnHighlightEnd(bool instant)`（`protected virtual` 钩子）+ `IsHighlighted` —— **悬停高亮**。基类实现是把 `highlightImage` 的 alpha 在 `0` 与 `highlightAlpha` 之间淡入淡出；**状态在 `SetHighlight` 维护、表现在钩子里**，子类只重写钩子即可。`SetHighlight` 也可由外部调用（如「高亮某条路径上的全部节点」）。
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` —— 点击回调（可订阅事件，或子类重写触发音效 / 对话 / 剧情等）。
 - `OnSpawn()` / `OnDespawn()` —— `IPoolable` 池回调（`OnDespawn` → 自动 `OnUnbindData`，复用不残留旧状态）。
+- `OnDisable()`（`protected virtual`）—— 停用时复位弹窗与高亮；子类重写务必调用 `base.OnDisable()`。
+
+**高亮层预制体配置**：`highlightImage` 建议置于节点底板之上、图标与文字之下，stretch 铺满，初始 `alpha = 0`，并**关闭 Raycast Target** —— alpha 为 0 的 `Image` 依然阻挡射线（`Image.IsRaycastLocationValid` 默认不看 `color.a`），高亮层一旦外扩就会挤占相邻节点的悬停与点击。Demo 的两个节点预制体直接复用了各自底板的 sprite，高亮形状天然与节点吻合。
+
+**子类实现注意**：
+
+- **务必尊重 `instant` 参数**：为 `true` 时必须瞬间到位、不得留下在途补间 —— 该路径用于对象池归还与停用时的复位，而 toolkit 的补间**不随 GameObject 停用而停止**，残留的补间会渗进下一次复用（表现为「另一个节点莫名其妙亮着」）。
+- 补间默认 `unscaled = true`（`Time.timeScale = 0` 时仍推进）。节点树面板通常在暂停界面打开，不要改成 `false`。
+- 典型用法 —— 未解锁的节点不高亮：
+
+```csharp
+protected override void OnHighlightBegin(bool instant)
+{
+    if (nodeData == null) return;
+    if (!NodeTreeSaveDataManager.HasTag(nodeData.nodeId, NodeTreeTags.Unlock)) return;
+    base.OnHighlightBegin(instant);   // 已解锁才走基类的淡入
+}
+```
 
 ### `UIScrollingBackground`
 

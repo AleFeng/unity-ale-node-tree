@@ -6,6 +6,31 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.5.0] - 2026-08-23
+
+节点 UI 新增鼠标悬停高亮，并把「高亮开始 / 结束」开放为子类可重写的钩子。
+
+### 新增
+
+- **节点悬停高亮**：`UINodeBase` 新增高亮层字段 `highlightImage`（只改其 `color.a`，不动 RGB）与 `highlightAlpha` / `highlightFadeInDuration` / `highlightFadeOutDuration`，鼠标悬停时淡入、移出时淡出（基于 toolkit 中央 Tween）。**状态与表现分离**：`SetHighlight(bool on, bool instant = false)` 是唯一写入口（悬停事件与外部调用共用，同态调用幂等），具体表现交给 `OnHighlightBegin(bool)` / `OnHighlightEnd(bool)` 两个 `protected virtual` 钩子 —— 子类只重写钩子即可实现自己的高亮表现（发光、缩放、粒子，或按解锁状态区别对待），无需也不应自行改动状态位；`protected bool IsHighlighted` 供子类组合判断。`highlightImage` 未配置时全部路径静默跳过。
+- **Demo 节点预制体加提亮罩**：`UINodeNomal` / `UINodeEnding` 各新增 `ImgHighlight` 子物体（置于底板之后、图标之前，stretch 铺满、初始 alpha = 0、关闭 Raycast Target），**sprite 复用各自底板** —— 圆形节点得圆形高亮、圆角矩形节点得圆角高亮，无需新美术资源。`Assets/Demo` 与 `Samples~/Demo` 两份拷贝已同步。
+
+### 变更
+
+- **悬停虚方法不再因未配置弹窗而提前返回**：`OnPointerEnterNode()` / `OnPointerExitNode()` 原本开头是 `if (!infoPanel) return;`，会让没有信息弹窗的节点连高亮也一并拿不到；现改为弹窗与高亮各自独立判断。
+- ⚠ **对既有子类是行为增量**：调用 `base.OnPointerEnterNode()` / `base.OnPointerExitNode()` 时，1.5.0 起会额外走一遍 `OnHighlightBegin` / `OnHighlightEnd`。既有预制体上 `highlightImage` 必为 null，故净效果为 no-op。
+- 既有预制体**无需迁移**：新增的 `[SerializeField]` 字段是纯增量，资产 YAML 中缺这些键时 Unity 反序列化保留 C# 字段初始值（`highlightAlpha = 1`、两个时长各 `0.15`），`highlightImage` 为 null 走静默跳过路径。
+
+### 修复
+
+- **面板停用导致信息弹窗永久常亮**：节点树面板整体 `SetActive(false)` 关闭时，节点不走对象池归还，且悬停中的节点收不到 `PointerExit`（Unity 不向非激活对象派发），而 toolkit 的补间**不随 GameObject 停用而停止** —— 弹窗会一路淡入到全亮，且守卫位卡在「已淡入」，再次打开面板后该节点弹窗常亮、再悬停也毫无反应。现由新增的 `protected virtual void OnDisable()` 统一复位弹窗与高亮。声明为 `virtual` 是因为 Unity 只调用最派生的同名方法，子类若自行写 `private void OnDisable()` 会**静默**吞掉基类实现（有 `virtual` 时至少会触发 CS0114 提示）。
+- **`ResetInfoPanel()` 未先打断补间就写 `alpha = 0`**：在途的淡入会继续把它推回去。现将 `Kill()` 收进该方法内部（它有绑定 / 解绑 / 停用三个调用点，逐处手写易漏）。
+
+### API
+
+- `UINodeBase` 新增：`public void SetHighlight(bool on, bool instant = false)`、`protected bool IsHighlighted { get; }`、`protected virtual void OnHighlightBegin(bool instant)`、`protected virtual void OnHighlightEnd(bool instant)`、`protected virtual void OnDisable()`。
+- 序列化字段新增：`highlightImage`（`Image`）、`highlightAlpha`（`[Range(0,1)]`，默认 1）、`highlightFadeInDuration` / `highlightFadeOutDuration`（默认各 0.15）。
+
 ## [1.4.1] - 2026-08-23
 
 修复方形节点在画布上相对连线与其它形状的垂直偏移。
