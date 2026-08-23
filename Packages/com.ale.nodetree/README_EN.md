@@ -44,6 +44,7 @@ The single source of truth for the whole tree (`ScriptableObject`). Create it vi
 | `tags` | `List<NodeTagData>`, the tag vocabulary (state tags a node can carry); seeded with `Unlock` (auto-refresh) and `Finished` |
 | `layoutDirection` | `ELayoutDirection`, overall canvas layout direction |
 | `zoom` | Reserved field, currently unused; editor canvas zoom is persisted via `EditorPrefs` |
+| `gridSize` | Editor canvas grid cell size in canvas units (default 20). Shared by the background grid spacing, drag snapping and arrow-key step; read through the `GridSize` property, which clamps the lower bound to 1. Unused at runtime |
 
 **Main API**: `GetNode(string nodeId)`, `GetNodeType(string typeName)` (return `null` when not found).
 
@@ -217,6 +218,8 @@ Open via `Tools > NodeTree > Node Tree Editor` (or the "Edit in Node Tree Editor
     - **Batch drag**: dragging any selected node moves every selected node by the same delta; grid snapping is computed once for the dragged node so the relative layout is preserved.
     - **Batch delete**: `Delete` or the context menu removes every selected node with a single confirmation and a single Undo; surviving descendants are promoted, in order, to the nearest surviving ancestor.
     - **Align / distribute**: the toolbar offers left / center / right and top / middle / bottom alignment plus horizontal / vertical even distribution, all computed on **node centers**. Canvas Y points up, so "align top" takes the **maximum** y. Distribution keeps the two extremes fixed and spaces the rest evenly.
+    - **Arrow-key nudging**: with nodes selected, the arrow keys move them by one grid cell. When snapping is on the move lands on the **next grid line** in that direction, so a node that is off-grid only gets aligned by the first press. In a multi-selection the delta is computed once from the primary node and applied to all, preserving the relative layout. Arrow keys are not intercepted while a text field is being edited.
+  - **Grid settings (since 1.4.0)**: the toolbar reads `Grid: [snap] [size]`. The size is the grid cell length, stored in `NodeTreeData.gridSize` (default 20, clamped to 1–500, shared through the config asset) and used by the background grid, drag snapping and the arrow-key step alike.
 - **`NodeDrawer`** (static): draws node shapes (circle / square / polygon, etc.) and connections (straight / bezier / polyline) with IMGUI + GL, during `Repaint` only.
 - **`NodeTreeCanvasState`**: canvas interaction state (pan / zoom / selection / drag) and canvas↔screen coordinate conversion.
 - **`NodeTreeDataEditor`**: a custom Inspector for `NodeTreeData` that adds an "Edit in Node Tree Editor" button on top.

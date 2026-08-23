@@ -44,6 +44,7 @@
 | `tags` | `List<NodeTagData>`，标签词表（内置 `Unlock` / `Finished`，可自定义） |
 | `layoutDirection` | `ELayoutDirection`，画布整体布局方向 |
 | `zoom` | 保留字段，当前未使用；编辑器画布缩放经 `EditorPrefs` 持久化 |
+| `gridSize` | 编辑器画布网格的最小单位格长度（画布单位，默认 20）。背景网格间距、拖拽吸附与方向键步长共用；经只读属性 `GridSize` 读取，下限 1。运行时不使用 |
 
 **主要 API**：`GetNode(string nodeId)`、`GetNodeType(string typeName)`（未找到返回 `null`）。
 
@@ -215,6 +216,8 @@ save.Load(json);
     - **批量拖拽**：拖动任一选中节点，全部选中节点按同一位移整体跟随（吸附只对主拖拽节点算一次，保持相对布局）。
     - **批量删除**：`Delete` 键或右键菜单删除全部选中 —— 单次确认、单次 Undo，存活后代按原顺序提升到最近的存活祖先。
     - **对齐 / 分布**：工具栏提供 左 / 水平居中 / 右、上 / 垂直居中 / 下 对齐与水平 / 垂直等距分布，按**节点中心**计算（画布 Y 轴向上，「上对齐」取最大 y）；等距分布两端不动、中间均分。
+    - **方向键移动**：选中（含多选）后按方向键以网格步长移动。开启吸附时移动到该方向的**下一条网格线**（不在网格上时本次按键只做对齐）；多选按主选中节点算一次位移整体施加，保持相对布局。焦点在文本输入框时不拦截。
+  - **网格设置（1.4.0 起）**：工具栏排为 `网格：[吸附网格][尺寸]`。尺寸即网格最小单位格长度，存于 `NodeTreeData.gridSize`（默认 20，取值 1–500，随配置资产共享），背景网格、拖拽吸附与方向键步长共用。
   - **「标签」页签**：维护 `NodeTreeData.tags` 词表（增删标签、改名 / 说明 / 颜色 / `autoRefresh`）。顶部「标签设置」区含**「自动写入 Unlock 条件」**开关——项目级设置（存 `ProjectSettings/NodeTreeEditorSettings.asset`，随版本库共享）：开启时在画布「添加子节点 / 连线」会自动向子节点的 `Unlock` 规则写入 `NodeTree.NodeFinished(target = 父节点 ID)` 条件。
   - **右侧节点属性面板**：对每个标签用 Toolkit 的 `ConditionExpression` 内联绘制器（`ConditionExpressionDrawer`）编辑其在本节点的挂载条件，内置判定器可从下拉直接选择。
 - **`NodeDrawer`**（静态）：用 IMGUI + GL 绘制节点形状（圆 / 方 / 多边形等）与连线（直线 / 贝塞尔 / 折线），仅在 `Repaint` 期绘制。
