@@ -177,6 +177,7 @@ save.Load(json);
 - **为每种节点类型合并生成连线 Mesh**（减少 DrawCall），UV 配合 `NodeTree/NodeLineFlow` 做流光；
 - 在 `LateUpdate` 中按脏标记按需重建连线；
 - `refreshStatesOnInit`：勾选后在 `InitTree` 时自动调用 `RefreshAllNodeStates`（按存档与条件刷新所有自动标签）。
+- `forceUnlockForTest` + `forceUnlockTags`【测试用】（1.5.2 起，原 `unlockAllForTest`）：勾选开关后，`InitTree` 给每个节点挂上 `forceUnlockTags` 里的标签，绕过解锁条件与存档状态，便于查看整棵树的完整结构。**列表留空则挂上词表（`NodeTreeData.tags`）里的全部标签**——零配置即生效，宿主改了标签名也不会让开关静默失效（节点能不能进由宿主说了算，只挂 `Unlock` 对用自定义标签判定的宿主毫无作用）。需要收窄时再逐条填写。只往内存态里加标签，不改存档文件；发布前应保持关闭。
 
 **主要 API**：`InitTree(NodeTreeData configOverride = null)`（初始化 / 重建整棵树）、`RefreshAllNodeStates()`（对当前 `config` 调 `NodeTreeSaveDataManager.RefreshAllNodeStates`）、`SelectNode(string nodeId)`、`RefreshVisibility()`（重算视口裁剪）、`MarkLineDirty()`（标记连线待重建）。
 

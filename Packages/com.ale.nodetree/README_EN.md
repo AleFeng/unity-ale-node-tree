@@ -180,6 +180,7 @@ The runtime node-tree UI window (a standalone `MonoBehaviour`). Attach it to a U
 - **Merges a line mesh per node type** (fewer draw calls); UVs pair with `NodeTree/NodeLineFlow` for the flow effect;
 - Rebuilds lines on demand in `LateUpdate` via a dirty flag;
 - When `refreshStatesOnInit` is on, `InitTree` calls `RefreshAllNodeStates` so auto tags (e.g. `Unlock`) resolve on open.
+- `forceUnlockForTest` + `forceUnlockTags` (debug; since 1.5.2, formerly `unlockAllForTest`): with the toggle on, `InitTree` stamps the tags listed in `forceUnlockTags` onto every node, bypassing unlock conditions and save state so you can inspect the whole tree. **Leave the list empty to stamp every tag in the vocabulary** (`NodeTreeData.tags`) — that default works with zero configuration and cannot go silently ineffective when a host renames its tags, since the host decides what "enterable" means and stamping only `Unlock` does nothing for a host keying off its own tag. Fill the list in when you want to narrow it down. Tags go into the in-memory state only, never into the save file; keep it off for release builds.
 
 **Main API**: `InitTree(NodeTreeData configOverride = null)` (initialize / rebuild the whole tree), `SelectNode(string nodeId)`, `RefreshVisibility()` (recompute viewport culling), `MarkLineDirty()` (flag lines for rebuild), `RefreshAllNodeStates()` (recompute auto tags via `NodeTreeSaveDataManager`).
 

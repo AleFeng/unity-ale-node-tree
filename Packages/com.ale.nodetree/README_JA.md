@@ -176,6 +176,7 @@ save.Load(json);
 - **ノードタイプごとにライン Mesh を統合生成**（ドローコール削減）。UV は `NodeTree/NodeLineFlow` と連携して流光表現；
 - `LateUpdate` でダーティフラグに応じてラインを再構築。
 - `refreshStatesOnInit`：オンにすると `InitTree` 時に `NodeTreeSaveDataManager.RefreshAllNodeStates(config)` を自動実行し、全 `autoRefresh` タグを再計算。
+- `forceUnlockForTest` ＋ `forceUnlockTags`（デバッグ用。1.5.2 以降。旧名 `unlockAllForTest`）：スイッチをオンにすると `InitTree` 時に `forceUnlockTags` のタグを全ノードへ付与し、解放条件とセーブ状態を無視してツリー全体を確認できます。**リストが空の場合はタグ辞書（`NodeTreeData.tags`）のすべてのタグ**を付与します —— 設定ゼロで機能し、ホストがタグ名を変えてもスイッチが静かに無効化されません（「進入可否」を決めるのはホスト側であり、独自タグで判定しているホストに `Unlock` だけ付けても効果がないためです）。絞りたい場合のみリストに列挙してください。付与はメモリ上の状態のみで、セーブファイルは書き換えません。リリース前はオフに。
 
 **主な API**：`InitTree(NodeTreeData configOverride = null)`（ツリー全体を初期化 / 再構築）、`RefreshAllNodeStates()`（`NodeTreeSaveDataManager` 経由で全 auto タグを再計算）、`SelectNode(string nodeId)`、`RefreshVisibility()`（ビューポートカリングを再計算）、`MarkLineDirty()`（ラインを再構築対象としてマーク）。
 

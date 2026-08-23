@@ -6,6 +6,29 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.5.2] - 2026-08-24
+
+「全部解锁」测试开关此前对使用自定义标签的宿主不起作用，现在改为可配置。
+
+### 变更
+
+- **`UINodeTreeWindow.unlockAllForTest` 更名为 `forceUnlockForTest`**，并新增标签列表 `forceUnlockTags`
+  （`List<string>`，默认**留空**）：勾选开关后，给每个节点挂上列表里的标签；**留空则挂上标签词表
+  （`NodeTreeData.tags`）里的全部标签**。既有资产由 `[FormerlySerializedAs]` 承接，勾选状态不会丢。
+
+  此前它只挂 `NodeTreeTags.Unlock`。但节点能不能进由宿主说了算，而宿主常常用自己定义的标签来判
+  （如「本周目读完」「跨周目读过」）——那类宿主勾上开关会**毫无反应**，而一个测试开关最不该有的
+  表现就是「点了没动静」。
+
+  「留空即全挂」是刻意的默认：零配置就有效，宿主改了标签名也不会让这个开关静默失效。需要收窄时
+  （例如某个标签另有副作用、不该被测试开关带上）再逐条填写，此时**严格按填写的来**，不再补 `Unlock`。
+  留空路径下 `Unlock` 仍无条件挂上，词表被改过、没有这一项的工程行为不变。
+
+### API
+
+- `UINodeTreeWindow` 序列化字段：`unlockAllForTest` → `forceUnlockForTest`（`[FormerlySerializedAs]` 兼容旧资产）；
+  新增 `forceUnlockTags`（`List<string>`，默认空 = 词表全部标签）。
+
 ## [1.5.1] - 2026-08-24
 
 条件求值可以取到本插件之外的数据源了。
