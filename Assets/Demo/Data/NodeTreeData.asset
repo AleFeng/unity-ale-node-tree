@@ -438,7 +438,7 @@ MonoBehaviour:
   nodeTypes:
   - typeName: "\u666E\u901A"
     resolution: {x: 100, y: 100}
-    shape: 0
+    shape: 1
     color: {r: 0.6, g: 0.8, b: 0.8, a: 1}
     icon: {fileID: 0}
     label: 
@@ -471,3 +471,4 @@ MonoBehaviour:
     autoRefresh: 0
   layoutDirection: 0
   zoom: 1
+  gridSize: 20

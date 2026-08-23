@@ -123,7 +123,8 @@ namespace Ale.NodeTree.Editor
 
         /// <summary>
         /// 根据节点形状枚举分派到对应的 GL 绘制方法。
-        /// Square 使用 EditorGUI.DrawRect，Circle 使用 GL 椭圆，其余使用多边形顶点列表。
+        /// 全部形状统一走 GL（Circle 用椭圆，Square / 胶囊用轴对齐矩形，其余用多边形顶点列表），
+        /// 以保证与连线 / 箭头共用同一套坐标变换与硬件裁剪（见 <see cref="SetGLClip"/>）。
         /// </summary>
         private static void DrawNodeShape(Rect rect, ENodeShape shape, Color fill, Color border, float bw)
         {
@@ -150,14 +151,23 @@ namespace Ale.NodeTree.Editor
             }
         }
 
-        /// <summary>绘制矩形节点：填充色块 + 四条边框线（使用 EditorGUI.DrawRect）。</summary>
+        /// <summary>
+        /// 绘制矩形节点：GL 填充色块 + 四条内描边。
+        /// <para>⚠ 必须用 GL 而非 <c>EditorGUI.DrawRect</c>：后者走 IMGUI 路径，与画布上其余形状、
+        /// 连线、箭头所用的 GL 视口（<see cref="SetGLClip"/> 建立的 <c>GL.Viewport</c> +
+        /// <c>GL.LoadPixelMatrix</c>）不是同一套坐标变换。方形曾因此相对连线与其它形状出现固定像素的
+        /// 垂直偏移；缩小视口后节点变小，该固定偏移的相对占比随之放大，偏移更明显。</para>
+        /// <para>描边仍为<b>内描边</b>（四条边都画在 rect 内部），与改动前的视觉语义保持一致。</para>
+        /// </summary>
         private static void DrawRect(Rect rect, Color fill, Color border, float bw)
         {
-            EditorGUI.DrawRect(rect, fill);
-            EditorGUI.DrawRect(new Rect(rect.x, rect.y, rect.width, bw), border);                    // 上边
-            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - bw, rect.width, bw), border);            // 下边
-            EditorGUI.DrawRect(new Rect(rect.x, rect.y, bw, rect.height), border);                   // 左边
-            EditorGUI.DrawRect(new Rect(rect.xMax - bw, rect.y, bw, rect.height), border);           // 右边
+            BeginGLClip();
+            DrawFilledRectGL(rect, fill);
+            DrawFilledRectGL(new Rect(rect.x, rect.y, rect.width, bw), border);              // 上边
+            DrawFilledRectGL(new Rect(rect.x, rect.yMax - bw, rect.width, bw), border);      // 下边
+            DrawFilledRectGL(new Rect(rect.x, rect.y, bw, rect.height), border);             // 左边
+            DrawFilledRectGL(new Rect(rect.xMax - bw, rect.y, bw, rect.height), border);     // 右边
+            EndGLClip();
         }
 
         /// <summary>
@@ -177,26 +187,28 @@ namespace Ale.NodeTree.Editor
         }
 
         /// <summary>
-        /// 绘制水平胶囊形节点：中间矩形 + 左右两端半圆（GL 椭圆）。
-        /// 上下边框使用 EditorGUI.DrawRect，左右端使用 GL 椭圆边框。
+        /// 绘制水平胶囊形节点：中间矩形 + 左右两端半圆，全部走 GL。
+        /// 中间矩形与上下边框此前用 <c>EditorGUI.DrawRect</c>（IMGUI），与两端半圆（GL）不同源，
+        /// 同 <see cref="DrawRect"/> 的原因会造成错位，故一并改为 GL。
         /// </summary>
         private static void DrawHorizontalCapsule(Rect rect, Color fill, Color border, float bw)
         {
-            float radius = rect.height * 0.5f; // 左右端半圆的半径
-            // 中间矩形 + 两端半圆
-            var midRect = new Rect(rect.x + radius, rect.y, rect.width - radius * 2f, rect.height);
-            EditorGUI.DrawRect(midRect, fill);
+            float radius = rect.height * 0.5f;      // 左右端半圆的半径
+            float midW   = rect.width - radius * 2f; // 宽度小于高度时为负，此时只画两端半圆
 
             BeginGLClip();
+            if (midW > 0f) DrawFilledRectGL(new Rect(rect.x + radius, rect.y, midW, rect.height), fill);
             DrawFilledEllipseGL(new Vector2(rect.x + radius, rect.center.y), radius, radius, fill, 20);
             DrawFilledEllipseGL(new Vector2(rect.xMax - radius, rect.center.y), radius, radius, fill, 20);
             DrawEllipseBorderGL(new Vector2(rect.x + radius, rect.center.y), radius, radius, border, bw, 20);
             DrawEllipseBorderGL(new Vector2(rect.xMax - radius, rect.center.y), radius, radius, border, bw, 20);
-            EndGLClip();
-
             // 边框直线部分（上下两条）
-            EditorGUI.DrawRect(new Rect(rect.x + radius, rect.y, rect.width - radius * 2f, bw), border);
-            EditorGUI.DrawRect(new Rect(rect.x + radius, rect.yMax - bw, rect.width - radius * 2f, bw), border);
+            if (midW > 0f)
+            {
+                DrawFilledRectGL(new Rect(rect.x + radius, rect.y, midW, bw), border);
+                DrawFilledRectGL(new Rect(rect.x + radius, rect.yMax - bw, midW, bw), border);
+            }
+            EndGLClip();
         }
 
         /// <summary>
@@ -396,6 +408,22 @@ namespace Ale.NodeTree.Editor
         /// 使用 GL.TRIANGLES 扇形三角化方式填充任意凸多边形。
         /// 须在 GL.PushMatrix / GL.LoadPixelMatrix 环境中调用。
         /// </summary>
+        /// <summary>
+        /// GL 填充一个轴对齐矩形。须在 <see cref="BeginGLClip"/> / <see cref="EndGLClip"/> 之间调用。
+        /// 顶点顺序与 <see cref="DrawFilledPolygonGL"/> 一致（顺时针），保证与其余形状同样的缠绕方向。
+        /// </summary>
+        private static void DrawFilledRectGL(Rect r, Color color)
+        {
+            GetGLMat().SetPass(0);
+            GL.Begin(GL.QUADS);
+            GL.Color(color);
+            GL.Vertex3(r.xMin, r.yMin, 0f);
+            GL.Vertex3(r.xMax, r.yMin, 0f);
+            GL.Vertex3(r.xMax, r.yMax, 0f);
+            GL.Vertex3(r.xMin, r.yMax, 0f);
+            GL.End();
+        }
+
         private static void DrawFilledPolygonGL(Vector2[] pts, Color color)
         {
             GetGLMat().SetPass(0);
