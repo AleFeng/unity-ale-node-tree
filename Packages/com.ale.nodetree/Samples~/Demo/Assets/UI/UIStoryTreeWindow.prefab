@@ -725,7 +725,11 @@ MonoBehaviour:
   nodeTreeRoot: {fileID: 6165292323255466252}
   nodeTreePadding: {x: 100, y: 100, z: 100, w: 100}
   refreshStatesOnInit: 1
-  unlockAllForTest: 0
+  forceUnlockForTest: 0
+  forceUnlockTags: []
+  infoPanelPrefab: {fileID: 3733685018742849909, guid: dd6d1027002a90e498235d84823dd915, type: 3}
+  infoPanelLayer: {fileID: 0}
+  infoPanelPreload: 2
   uiCamera: {fileID: 0}
   cullPadding: 100
 --- !u!1 &8041017765126164128
