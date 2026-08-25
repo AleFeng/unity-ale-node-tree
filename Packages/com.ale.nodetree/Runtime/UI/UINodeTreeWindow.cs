@@ -94,7 +94,19 @@ namespace Ale.NodeTree.Runtime
                     _visibilityDirty    = false;
                 }
             }
+
+            // 弹窗跟随节点移动（ScrollRect 滚动 / 画布缩放），并回收淡出完毕的实例。
+            // 只遍历当前激活的极少数弹窗，静止时开销可忽略。
+            UpdateInfoPanels();
         }
+
+        /// <summary>
+        /// 本窗口停用时立即收起全部信息弹窗。
+        /// <para>必要性：toolkit 的补间<b>不随 GameObject 停用而停止</b>，在途的淡入会一路跑到全亮；
+        /// 而 <c>LateUpdate</c> 随之停摆，轮询回收也不会再发生 —— 再次打开面板就是一片常亮的残留弹窗。
+        /// 这与 1.5.0 修掉的「面板停用致弹窗常亮」是同一类问题，只是弹窗换了归属。</para>
+        /// </summary>
+        private void OnDisable() => HideAllNodeInfoPanels(instant: true);
 
         private void OnDestroy()
         {
@@ -103,6 +115,12 @@ namespace Ale.NodeTree.Runtime
             foreach (var pool in _pools.Values)
                 if (pool) pool.DespawnAll();
             _activeNodes.Clear();
+
+            // 1.5) 收起并归还全部信息弹窗：DespawnAll 会触发各弹窗的 OnDespawn，
+            //      在其中解绑数据并打断在途补间（补间不随停用停止，不打断会残留到下次复用）。
+            HideAllNodeInfoPanels(instant: true);
+            if (_infoPanelPool) _infoPanelPool.DespawnAll();
+            _activeInfoPanels.Clear();
 
             // 2) 销毁连线材质实例与合并 Mesh（原生对象不被 GC，否则每次销毁泄漏一个/类型）。
             foreach (var mat in _lineMaterialInstances.Values)
@@ -128,6 +146,13 @@ namespace Ale.NodeTree.Runtime
             foreach (var pool in _pools.Values)
                 if (pool) Destroy(pool.gameObject);
             _pools.Clear();
+
+            if (_infoPanelPool) Destroy(_infoPanelPool.gameObject);
+            _infoPanelPool = null;
+
+            // 只销毁本窗口自己建的弹窗层；Inspector 手动指定的层归使用者所有，不能替他销毁。
+            if (_ownsInfoPanelLayer && _infoPanelLayer) Destroy(_infoPanelLayer.gameObject);
+            _infoPanelLayer = null;
         }
 
         #region 公开接口
@@ -152,6 +177,9 @@ namespace Ale.NodeTree.Runtime
             CalcAndSetRootSize(); // 计算 sizeDelta 与节点偏移量（依赖 EnsureContainers 已执行）
             EnsureCamera();
             InitPools();
+            // 先建池再建弹窗层：池对象也挂在本窗口下，反过来会把弹窗层挤出末位
+            InitInfoPanelPool();
+            EnsureInfoPanelLayer();
             InitLineMeshRenderers();
             _lineMeshDirty   = true;
             _visibilityDirty = true; // 强制下一帧刷新一次可见性
@@ -561,11 +589,261 @@ namespace Ale.NodeTree.Runtime
         private void DespawnNode(string nodeId)
         {
             if (!_activeNodes.TryGetValue(nodeId, out var nodeUI)) return;
+
+            // 节点被视口裁掉，其弹窗不能继续留在屏上
+            HideNodeInfoPanel(nodeId);
+
             ToolkitPool.Despawn(nodeUI.gameObject);
             _activeNodes.Remove(nodeId);
         }
         #endregion
         
+        #region 信息弹窗
+        [Header("信息弹窗")]
+        [Tooltip("信息弹窗预制体（需挂 UINodeInfoPanel）。留空则整套弹窗功能静默关闭。\n" +
+                 "弹窗由本窗口统一用对象池管理，不再由每个节点预制体各挂一份。")]
+        [SerializeField] private UINodeInfoPanel infoPanelPrefab;
+
+        [Tooltip("弹窗所在的层。留空则在本窗口下自动创建 InfoPanelLayer（最后一个兄弟，压在 ScrollView 之上）。\n" +
+                 "手动指定时务必选在 ScrollView 的 Viewport 之外，否则弹窗会被其 Mask 裁剪。")]
+        [SerializeField] private RectTransform infoPanelLayer;
+
+        [Tooltip("弹窗对象池的预热数量，默认 2（同时显示多个弹窗时才会用到更多）。")]
+        [SerializeField] private int infoPanelPreload = 2;
+
+        // 弹窗对象池：全窗口共用一个预制体，故只需一个池。
+        private ToolkitGameObjectPool _infoPanelPool;
+
+        // 运行时实际使用的弹窗层，以及它是否由本窗口创建（决定销毁时是否该动它）。
+        private RectTransform _infoPanelLayer;
+        private bool          _ownsInfoPanelLayer;
+
+        // 当前激活（显示中或正在淡出）的弹窗。数量极少（通常 0~2），用 List 顺序查找即可，
+        // 也便于回收时倒序遍历原地移除。
+        private readonly List<UINodeInfoPanel> _activeInfoPanels = new List<UINodeInfoPanel>();
+
+        /// <summary>
+        /// 确保弹窗层就绪：Inspector 指定了就用指定的，否则在本窗口下自动创建 <c>InfoPanelLayer</c>。
+        ///
+        /// <para><b>为什么必须在 ScrollView 之外</b>：弹窗若挂在 <c>nodeTreeRoot</c>（Content）下，
+        /// 一来会被 Viewport 的 <c>Mask</c> 在视口边缘切掉，二来又回到了「渲染顺序跟着节点兄弟序走、
+        /// 被后 Spawn 的节点盖住」的老问题 —— 这正是把弹窗从节点里搬出来要解决的两件事。</para>
+        ///
+        /// <para>层的 <c>pivot</c> 取 (0.5, 0.5) 并铺满父级，使弹窗（anchor 亦为 0.5）的
+        /// <c>localPosition</c> 与 <c>anchoredPosition</c> 等价，定位时只写 <c>localPosition</c> 即可。</para>
+        /// </summary>
+        private void EnsureInfoPanelLayer()
+        {
+            // Inspector 显式指定：直接采用，且不视为本窗口所有。
+            if (infoPanelLayer)
+            {
+                _infoPanelLayer     = infoPanelLayer;
+                _ownsInfoPanelLayer = false;
+                return;
+            }
+
+            if (_infoPanelLayer && _ownsInfoPanelLayer)
+            {
+                _infoPanelLayer.SetAsLastSibling(); // 复用路径也重排，见方法末尾
+                return;
+            }
+
+            var parent = transform as RectTransform;
+            if (!parent)
+            {
+                Debug.LogWarning(
+                    "[UINodeTreeWindow] 本组件不在 RectTransform 上，无法自动创建弹窗层，" +
+                    "已回落到 nodeTreeRoot —— 弹窗会被 ScrollView 的 Mask 裁剪。" +
+                    "请手动指定 infoPanelLayer 到 Viewport 之外的某个 RectTransform。", this);
+                parent = nodeTreeRoot;
+            }
+            if (!parent) return;
+
+            var existing = parent.Find("InfoPanelLayer");
+            if (existing)
+            {
+                // 不能写成 GetComponent<T>() ?? AddComponent<T>()：组件缺失时 GetComponent 返回的是
+                // Unity 的"伪 null"包装对象，而 ?? 只看引用 null、不走 UnityEngine.Object 的 == 重载，
+                // 于是会短路成那个伪 null，随后一用就抛 MissingComponentException。
+                _infoPanelLayer = existing.GetComponent<RectTransform>();
+                if (!_infoPanelLayer) _infoPanelLayer = existing.gameObject.AddComponent<RectTransform>();
+            }
+            else
+            {
+                var go = new GameObject("InfoPanelLayer");
+                _infoPanelLayer = go.AddComponent<RectTransform>();
+                _infoPanelLayer.SetParent(parent, false);
+            }
+            _ownsInfoPanelLayer = true;
+
+            // 铺满父级；pivot 居中，见方法注释
+            _infoPanelLayer.pivot     = new Vector2(0.5f, 0.5f);
+            _infoPanelLayer.anchorMin = Vector2.zero;
+            _infoPanelLayer.anchorMax = Vector2.one;
+            _infoPanelLayer.offsetMin = Vector2.zero;
+            _infoPanelLayer.offsetMax = Vector2.zero;
+            // 压在 ScrollView 之上。对象池 GameObject 也挂在本窗口下，但它们不渲染任何东西，
+            // 其池内克隆在取用时会被改挂到本层，故它们的兄弟序无关紧要。
+            _infoPanelLayer.SetAsLastSibling();
+
+            // 整层不阻挡射线：各弹窗自身也会关，这里再兜一道，防止子类改坏了单个弹窗的设置后
+            // 弹窗挡住光标 —— 那会造成 PointerExit / PointerEnter 反复互触的闪烁死循环。
+            var layerGroup = _infoPanelLayer.GetComponent<CanvasGroup>();
+            if (!layerGroup) layerGroup = _infoPanelLayer.gameObject.AddComponent<CanvasGroup>();
+            layerGroup.blocksRaycasts = false;
+        }
+
+        /// <summary>
+        /// 初始化弹窗对象池。与 <see cref="InitPools"/> 同构：先清旧池（连同池内非激活克隆），
+        /// 避免重复 <see cref="InitTree"/> 累积孤儿层级。未配置 <c>infoPanelPrefab</c> 时直接返回。
+        /// </summary>
+        private void InitInfoPanelPool()
+        {
+            if (_infoPanelPool)
+            {
+                _infoPanelPool.DespawnAll(); // 触发各弹窗 OnDespawn：解绑数据 + 打断在途补间
+                Destroy(_infoPanelPool.gameObject);
+                _infoPanelPool = null;
+            }
+            _activeInfoPanels.Clear();
+
+            if (!infoPanelPrefab) return;
+
+            var poolGo = new GameObject("Pool_InfoPanel");
+            poolGo.transform.SetParent(transform);
+            _infoPanelPool = poolGo.AddComponent<ToolkitGameObjectPool>();
+            _infoPanelPool.Prefab       = infoPanelPrefab.gameObject;
+            _infoPanelPool.Notification = ToolkitGameObjectPool.PoolNotificationType.IPoolable;
+            _infoPanelPool.Preload      = Mathf.Max(0, infoPanelPreload);
+        }
+
+        /// <summary>
+        /// 显示指定节点的信息弹窗并淡入。已在显示（或正在淡出）的节点复用同一实例，不会重复取用。
+        /// <para>悬停时由 <see cref="UINodeBase"/> 转调；也可由外部直接调用，
+        /// 例如「把某条路径上的几个节点的弹窗一起钉住」。</para>
+        /// </summary>
+        /// <param name="nodeId">节点 ID。</param>
+        /// <returns>该节点的弹窗实例；未配置预制体 / 弹窗层缺失 / 节点不存在时返回 null。</returns>
+        public UINodeInfoPanel ShowNodeInfoPanel(string nodeId)
+        {
+            if (string.IsNullOrEmpty(nodeId) || !config) return null;
+
+            var node = config.GetNode(nodeId);
+            if (node == null) return null;
+
+            var panel = FindInfoPanel(nodeId);
+            if (!panel)
+            {
+                if (!_infoPanelPool || !_infoPanelLayer) return null;
+
+                var clone = _infoPanelPool.Spawn(Vector3.zero, Quaternion.identity, _infoPanelLayer);
+                if (!clone) return null;
+
+                panel = clone.GetComponent<UINodeInfoPanel>();
+                if (!panel)
+                {
+                    // 预制体缺少 UINodeInfoPanel：立即归还，避免激活实例泄漏且永不被回收。
+                    ToolkitPool.Despawn(clone);
+                    return null;
+                }
+                _activeInfoPanels.Add(panel);
+            }
+
+            panel.Bind(node, config.GetNodeType(node.nodeTypeRef));
+            PositionInfoPanel(panel);
+            if (panel.Rect) panel.Rect.SetAsLastSibling(); // 后显示的压在最上
+            panel.Show();
+            return panel;
+        }
+
+        /// <summary>
+        /// 隐藏指定节点的信息弹窗（淡出）。
+        /// <para><b>不在此归还对象池</b>：实例留在激活列表里，等 <see cref="UpdateInfoPanels"/> 轮询到
+        /// 淡出结束（<see cref="UINodeInfoPanel.IsRecyclable"/>）再回收。这样淡出途中重新悬停能直接
+        /// 复用同一实例淡回去，不必处理「淡出完成回调」与「新的显示请求」互相打架。</para>
+        /// </summary>
+        public void HideNodeInfoPanel(string nodeId)
+        {
+            var panel = FindInfoPanel(nodeId);
+            if (panel) panel.Hide();
+        }
+
+        /// <summary>
+        /// 隐藏全部信息弹窗。<paramref name="instant"/> 为 true 时瞬间收起并<b>立即</b>回收 ——
+        /// 停用 / 销毁路径必须用它，那之后 <c>LateUpdate</c> 不会再来做轮询回收了。
+        /// </summary>
+        public void HideAllNodeInfoPanels(bool instant = false)
+        {
+            for (int i = 0; i < _activeInfoPanels.Count; i++)
+                if (_activeInfoPanels[i]) _activeInfoPanels[i].Hide(instant);
+
+            if (instant) UpdateInfoPanels();
+        }
+
+        /// <summary>
+        /// 逐帧维护激活弹窗：回收淡出完毕的，其余重新定位以跟随节点。
+        /// <para><b>回收走轮询而非补间的完成回调</b>：完成回调在「时长 ≤ 0」与「Kill(true)」两条路径上是
+        /// <b>同步</b>触发的，若在其中归还对象池并改动 <see cref="_activeInfoPanels"/>，
+        /// 就会在 <see cref="HideAllNodeInfoPanels"/> 的遍历中途改集合。轮询模型下集合只在这一处被改。</para>
+        /// </summary>
+        private void UpdateInfoPanels()
+        {
+            // 倒序：原地移除不影响尚未遍历到的下标
+            for (int i = _activeInfoPanels.Count - 1; i >= 0; i--)
+            {
+                var panel = _activeInfoPanels[i];
+                if (!panel) { _activeInfoPanels.RemoveAt(i); continue; }
+
+                if (panel.IsRecyclable)
+                {
+                    _activeInfoPanels.RemoveAt(i);
+                    ToolkitPool.Despawn(panel.gameObject);
+                    continue;
+                }
+
+                PositionInfoPanel(panel);
+            }
+        }
+
+        /// <summary>
+        /// 把弹窗摆到其绑定节点的位置（外加 <see cref="UINodeInfoPanel.GetOffset"/> 的偏移）。
+        ///
+        /// <para>换算走「节点容器局部 → 世界 → 弹窗层局部」：两个 Transform 同处一个 Canvas，
+        /// 因此<b>无需相机、无需屏幕坐标往返</b>，对 Overlay / Camera / World 三种 RenderMode 一律成立。</para>
+        ///
+        /// <para>偏移施加在<b>弹窗层</b>空间而非节点容器空间，故缩放画布（<c>localScale</c>）时
+        /// 弹窗自身尺寸与偏移保持不变 —— 这是有意为之：弹窗是给人读的，不该跟着缩小到看不清。</para>
+        /// </summary>
+        private void PositionInfoPanel(UINodeInfoPanel panel)
+        {
+            if (!panel || !panel.Rect || !_nodeContainer || !_infoPanelLayer) return;
+
+            var node = panel.BoundNode;
+            if (node == null) return;
+
+            Vector3 local = new Vector3(node.position.x + _nodePositionOffset.x,
+                                        node.position.y + _nodePositionOffset.y, 0f);
+            Vector3 world      = _nodeContainer.TransformPoint(local);
+            Vector3 layerLocal = _infoPanelLayer.InverseTransformPoint(world);
+
+            Vector2 offset = panel.GetOffset(node, panel.BoundType);
+            panel.Rect.localPosition = new Vector3(layerLocal.x + offset.x,
+                                                   layerLocal.y + offset.y, 0f);
+        }
+
+        /// <summary>在激活弹窗中按节点 ID 查找；没有则返回 null。数量极少，顺序查找即可。</summary>
+        private UINodeInfoPanel FindInfoPanel(string nodeId)
+        {
+            for (int i = 0; i < _activeInfoPanels.Count; i++)
+            {
+                var panel = _activeInfoPanels[i];
+                if (panel && panel.BoundNode != null && panel.BoundNode.nodeId == nodeId)
+                    return panel;
+            }
+            return null;
+        }
+        #endregion
+
         #region 节点连线
         // 连线 Mesh：key = typeName
         // 使用 CanvasRenderer 而非 MeshFilter/MeshRenderer，才能在 Canvas 中正确渲染。
