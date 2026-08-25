@@ -25,7 +25,7 @@ A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeD
 | **Data** | Node / type / state tags / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `NodeTagData`, `NodeTagRule` |
 | **Conditions** | node-tree condition wiring (into toolkit `Ale.Condition`) | `INodeTreeStateSource`, `NodeTreeConditionContext`, `NodeTreeTags`; evaluators `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
 | **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
-| **Runtime UI** | Node-tree presentation, hover highlight & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UIScrollingBackground`, `NodeLineBuilder` |
+| **Runtime UI** | Node-tree presentation, hover highlight, info popups & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UINodeInfoPanel`, `UIScrollingBackground`, `NodeLineBuilder` |
 | **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 | **Shader** | Flowing line | `NodeTree/NodeLineFlow` |
 
@@ -179,24 +179,28 @@ The runtime node-tree UI window (a standalone `MonoBehaviour`). Attach it to a U
 - **Pools node UI per node type** (via `ToolkitGameObjectPool` from `com.ale.toolkit`) and **Spawns / Despawns on demand through viewport culling**;
 - **Merges a line mesh per node type** (fewer draw calls); UVs pair with `NodeTree/NodeLineFlow` for the flow effect;
 - Rebuilds lines on demand in `LateUpdate` via a dirty flag;
+- **Owns the info popups** (since 1.6.0): `infoPanelPrefab` names the popup prefab; the window creates an `InfoPanelLayer` under itself (outside the ScrollView, last sibling) plus a pool, positions popups at their node on hover and keeps them following while the tree scrolls or zooms. See [`UINodeInfoPanel`](#uinodeinfopanel).
 - When `refreshStatesOnInit` is on, `InitTree` calls `RefreshAllNodeStates` so auto tags (e.g. `Unlock`) resolve on open.
 - `forceUnlockForTest` + `forceUnlockTags` (debug; since 1.5.2, formerly `unlockAllForTest`): with the toggle on, `InitTree` stamps the tags listed in `forceUnlockTags` onto every node, bypassing unlock conditions and save state so you can inspect the whole tree. **Leave the list empty to stamp every tag in the vocabulary** (`NodeTreeData.tags`) — that default works with zero configuration and cannot go silently ineffective when a host renames its tags, since the host decides what "enterable" means and stamping only `Unlock` does nothing for a host keying off its own tag. Fill the list in when you want to narrow it down. Tags go into the in-memory state only, never into the save file; keep it off for release builds.
 
-**Main API**: `InitTree(NodeTreeData configOverride = null)` (initialize / rebuild the whole tree), `SelectNode(string nodeId)`, `RefreshVisibility()` (recompute viewport culling), `MarkLineDirty()` (flag lines for rebuild), `RefreshAllNodeStates()` (recompute auto tags via `NodeTreeSaveDataManager`).
+**Main API**: `InitTree(NodeTreeData configOverride = null)` (initialize / rebuild the whole tree), `SelectNode(string nodeId)`, `RefreshVisibility()` (recompute viewport culling), `MarkLineDirty()` (flag lines for rebuild), `RefreshAllNodeStates()` (recompute auto tags via `NodeTreeSaveDataManager`), `ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)` (info popups; hovering calls these for you, but you can also drive them directly to pin popups on several nodes).
 
 ### `UINodeBase`
 
-The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach it to node UI prefabs; `UINodeTreeWindow` spawns and binds them through the pool. Features: node icon display, name / description text (resolved via `AttributeValue.ResolveText()` into `TMP_Text`), hover info-popup fade in/out **and hover highlight** (both via `com.ale.toolkit`'s central tween), and a click callback.
+The node UI base class (`MonoBehaviour` + `IPoolable` + pointer events). Attach it to node UI prefabs; `UINodeTreeWindow` spawns and binds them through the pool. Features: node icon display, name / description text (resolved via `AttributeValue.ResolveText()` into `TMP_Text`), **hover highlight** (via `com.ale.toolkit`'s central tween), an **info popup** requested from the owning window on hover, and a click callback.
+
+> Since 1.6.0 the info popup is **no longer owned by the node**; `UINodeTreeWindow` manages it centrally — see [`UINodeInfoPanel`](#uinodeinfopanel).
 
 **Overridable virtuals & events**:
 
 - `OnBindData(NodeData data, NodeTypeData type)` / `OnUnbindData()` — bind / unbind data (`OnDespawn` unbinds automatically).
 - `OnNodeSelected()` / `OnNodeDeselected()` — visual feedback for select / deselect.
-- `OnPointerEnterNode()` / `OnPointerExitNode()` — hover: popup fade in / out, plus entering / leaving the highlight state.
+- `OnPointerEnterNode()` / `OnPointerExitNode()` — hover: ask the window to show / hide the info popup, plus entering / leaving the highlight state.
+- `ShowInfoPanel()` / `HideInfoPanel()` (`protected virtual`) + the serialized toggle `showInfoPanelOnHover` + `OwnerWindow` — **info popup**. The base implementation forwards to `OwnerWindow.ShowNodeInfoPanel(nodeData.nodeId)` / `HideNodeInfoPanel(...)`; override to add conditions (e.g. locked nodes get no popup). `HideInfoPanel` deliberately **ignores** the toggle: if it is switched off while a popup is already up, that popup must still be able to close. `OwnerWindow` is injected by the window on spawn (not `GetComponentInParent` — `nodeTreeRoot` is allowed to live outside the window component, so walking up is not guaranteed to find it).
 - `SetHighlight(bool on, bool instant = false)` (non-virtual, the single write entry) + `OnHighlightBegin(bool instant)` / `OnHighlightEnd(bool instant)` (`protected virtual` hooks) + `IsHighlighted` — **hover highlight**. The base implementation fades `highlightImage`'s alpha between `0` and `highlightAlpha`; **state lives in `SetHighlight`, appearance lives in the hooks**, so a subclass only overrides the hooks. `SetHighlight` can also be driven externally (e.g. "highlight every node along a path").
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` — click callback (subscribe to the event, or override in a subclass to trigger SFX / dialogue / story, etc.).
 - `OnSpawn()` / `OnDespawn()` — `IPoolable` pool callbacks (`OnDespawn` → auto `OnUnbindData`, so reused instances carry no stale state).
-- `OnDisable()` (`protected virtual`) — resets popup and highlight when the object is deactivated; a subclass override must call `base.OnDisable()`.
+- `OnDisable()` (`protected virtual`) — hides the popup and resets the highlight when the object is deactivated; a subclass override must call `base.OnDisable()`.
 
 **Highlight layer prefab setup**: place `highlightImage` above the node backplate but below the icon and text, stretched to fill, with an initial `alpha = 0`, and **turn Raycast Target off** — an `Image` with alpha 0 still blocks raycasts (`Image.IsRaycastLocationValid` ignores `color.a` by default), so an oversized highlight layer would steal hover and clicks from neighbouring nodes. The two demo node prefabs simply reuse their own backplate sprite, so the highlight shape matches each node for free.
 
@@ -214,6 +218,32 @@ protected override void OnHighlightBegin(bool instant)
     base.OnHighlightBegin(instant);   // only unlocked nodes get the base fade
 }
 ```
+
+### `UINodeInfoPanel`
+
+The info-popup component (`MonoBehaviour` + `IPoolable`, since 1.6.0). Attach it to a **standalone popup prefab**, assign that prefab to `UINodeTreeWindow.infoPanelPrefab`, and the window takes over spawning, positioning and recycling through a pool — nodes no longer own a popup of their own.
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `canvasGroup` | — | The `CanvasGroup` driven by the fade; auto-resolved from this GameObject when left empty. |
+| `fadeInDuration` / `fadeOutDuration` | 0.2 / 0.3 | Fade in / out duration (seconds). |
+| `offsetFromNode` | (0, 120) | Offset from the **node centre** (node-tree container units, Y up). |
+| `nodeNameText` / `nodeDescText` / `iconImage` | — | **Optional** wiring: filled from `NodeData.nodeName.ResolveText()` / `nodeDesc.ResolveText()` / `uiIcon` on bind; skipped when left empty (the demo popup's text is driven by Unity Localization, so all three stay empty). |
+
+**Main API**: `Bind(NodeData, NodeTypeData)` / `Unbind()` (`virtual`; overrides must call `base`), `Show(bool instant = false)` / `Hide(bool instant = false)` (**non-virtual**), `GetOffset(NodeData, NodeTypeData)` (`virtual`, so offsets can vary per node type / size), and the read-only `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`.
+
+**Overridable hooks**: `OnShowBegin(bool instant)` / `OnHideBegin(bool instant)` (`protected virtual`) — the base implementation tweens `canvasGroup`'s alpha to 1 / 0; override for a scale-in, a slide, a sweep, or anything else. The `instant` caveats are the same as for `UINodeBase`'s highlight hooks.
+
+`Show` / `Hide` are deliberately **not** `virtual`: `IsVisible` is the sole signal the window uses to recycle a popup, so an override that forgets `base` would leak popups out of the pool. State stays in the non-virtual entry point; appearance lives in the hooks.
+
+**Popup prefab setup**:
+
+- Set the root `RectTransform`'s anchors to **(0.5, 0.5)** — paired with the layer's centred `pivot`, the window can position it by writing `localPosition` alone.
+- **Do not enable `blocksRaycasts`** — the component force-clears it in `Awake`. The popup and the node live in separate subtrees, so the moment the popup covers the cursor you get `PointerExit` → hide → cursor back on the node → `PointerEnter` → show: a visible flicker loop.
+- The window creates the layer under its own `RectTransform` (last sibling). It **must sit outside the ScrollView's `Viewport`**, otherwise the `Mask` clips it and you are back to "covered by another node". Use `infoPanelLayer` to point somewhere else.
+- Popups **do not scale with the canvas**: the offset is applied in layer space, so zooming the node-tree canvas leaves popup size and offset untouched. This is deliberate — a popup is meant to be read, not shrunk out of legibility.
+
+**Showing several at once**: popups are keyed by `nodeId`, so you can `ShowNodeInfoPanel` several nodes at the same time. `Hide` only starts the fade-out and does not return the instance to the pool immediately; the window polls `IsRecyclable` in `LateUpdate` and recycles then — so re-hovering mid-fade reuses the same instance and fades it back in without a flicker.
 
 ### `UIScrollingBackground`
 

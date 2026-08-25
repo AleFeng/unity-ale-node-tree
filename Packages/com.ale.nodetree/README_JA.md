@@ -25,7 +25,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 | **データ** | ノード / タイプ / 状態タグ / カスタム属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件** | Toolkit 条件システムへの接続 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、判定器（`NodeFinishedEvaluator` / `NodeUnlockedEvaluator` / `NodeHasTagEvaluator`） |
 | **セーブ** | ノードごとのタグ状態 | `NodeTreeSaveDataManager` |
-| **ランタイム UI** | ノードツリー表示・ホバーハイライト・無限スクロール背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **ランタイム UI** | ノードツリー表示・ホバーハイライト・情報ポップアップ・無限スクロール背景 | `UINodeTreeWindow`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **エディタ** | ビジュアル編集 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **シェーダー** | 流光ライン | `NodeTree/NodeLineFlow` |
 
@@ -175,24 +175,28 @@ save.Load(json);
 - **ノードタイプ別にオブジェクトプール**（`com.ale.toolkit` の `ToolkitGameObjectPool`）を維持し、**ビューポートカリングでオンデマンドに Spawn / Despawn**；
 - **ノードタイプごとにライン Mesh を統合生成**（ドローコール削減）。UV は `NodeTree/NodeLineFlow` と連携して流光表現；
 - `LateUpdate` でダーティフラグに応じてラインを再構築。
+- **情報ポップアップの一元管理**（1.6.0 以降）：`infoPanelPrefab` にポップアップのプレハブを指定すると、ウィンドウが自身の配下に `InfoPanelLayer`（ScrollView の外・最後の兄弟）とオブジェクトプールを自動生成し、ホバー時にノード位置へ配置してスクロール / ズームに追従させます。詳細は [`UINodeInfoPanel`](#uinodeinfopanel)。
 - `refreshStatesOnInit`：オンにすると `InitTree` 時に `NodeTreeSaveDataManager.RefreshAllNodeStates(config)` を自動実行し、全 `autoRefresh` タグを再計算。
 - `forceUnlockForTest` ＋ `forceUnlockTags`（デバッグ用。1.5.2 以降。旧名 `unlockAllForTest`）：スイッチをオンにすると `InitTree` 時に `forceUnlockTags` のタグを全ノードへ付与し、解放条件とセーブ状態を無視してツリー全体を確認できます。**リストが空の場合はタグ辞書（`NodeTreeData.tags`）のすべてのタグ**を付与します —— 設定ゼロで機能し、ホストがタグ名を変えてもスイッチが静かに無効化されません（「進入可否」を決めるのはホスト側であり、独自タグで判定しているホストに `Unlock` だけ付けても効果がないためです）。絞りたい場合のみリストに列挙してください。付与はメモリ上の状態のみで、セーブファイルは書き換えません。リリース前はオフに。
 
-**主な API**：`InitTree(NodeTreeData configOverride = null)`（ツリー全体を初期化 / 再構築）、`RefreshAllNodeStates()`（`NodeTreeSaveDataManager` 経由で全 auto タグを再計算）、`SelectNode(string nodeId)`、`RefreshVisibility()`（ビューポートカリングを再計算）、`MarkLineDirty()`（ラインを再構築対象としてマーク）。
+**主な API**：`InitTree(NodeTreeData configOverride = null)`（ツリー全体を初期化 / 再構築）、`RefreshAllNodeStates()`（`NodeTreeSaveDataManager` 経由で全 auto タグを再計算）、`SelectNode(string nodeId)`、`RefreshVisibility()`（ビューポートカリングを再計算）、`MarkLineDirty()`（ラインを再構築対象としてマーク）、`ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)`（情報ポップアップ。ホバー時は自動的に呼ばれますが、「複数ノードのポップアップを固定表示する」用途で直接呼ぶこともできます）。
 
 ### `UINodeBase`
 
-ノード UI 基底クラス（`MonoBehaviour` + `IPoolable` + ポインタイベント）。ノード UI プレハブにアタッチし、`UINodeTreeWindow` がプール経由で生成・バインドします。機能：ノードアイコン表示、名前 / 説明テキスト（`AttributeValue.ResolveText()` で解決し `TMP_Text` に反映）、マウスホバー時の情報ポップアップのフェードと**ホバーハイライト**（いずれも `com.ale.toolkit` の中央 Tween ベース）、クリックコールバック。
+ノード UI 基底クラス（`MonoBehaviour` + `IPoolable` + ポインタイベント）。ノード UI プレハブにアタッチし、`UINodeTreeWindow` がプール経由で生成・バインドします。機能：ノードアイコン表示、名前 / 説明テキスト（`AttributeValue.ResolveText()` で解決し `TMP_Text` に反映）、**ホバーハイライト**（`com.ale.toolkit` の中央 Tween ベース）、ホバー時に所属ウィンドウへ**情報ポップアップ**を要求、クリックコールバック。
+
+> 1.6.0 以降、情報ポップアップは**ノードが持たなくなり**、`UINodeTreeWindow` が一元管理します。[`UINodeInfoPanel`](#uinodeinfopanel) を参照。
 
 **オーバーライド可能な仮想メソッド / イベント**：
 
 - `OnBindData(NodeData data, NodeTypeData type)` / `OnUnbindData()` —— データのバインド / アンバインド（`OnDespawn` で自動アンバインド）。
 - `OnNodeSelected()` / `OnNodeDeselected()` —— 選択 / 選択解除の視覚フィードバック。
-- `OnPointerEnterNode()` / `OnPointerExitNode()` —— ホバー：ポップアップのフェードイン / アウトに加え、ハイライト状態への出入り。
+- `OnPointerEnterNode()` / `OnPointerExitNode()` —— ホバー：ウィンドウへ情報ポップアップの表示 / 非表示を要求し、あわせてハイライト状態へ出入り。
+- `ShowInfoPanel()` / `HideInfoPanel()`（`protected virtual`）＋ シリアライズスイッチ `showInfoPanelOnHover` ＋ `OwnerWindow` —— **情報ポップアップ**。基底実装は `OwnerWindow.ShowNodeInfoPanel(nodeData.nodeId)` / `HideNodeInfoPanel(...)` への委譲です。条件を足したい場合（未解放ノードは出さない等）はオーバーライドしてください。`HideInfoPanel` は意図的にスイッチを**見ません** —— 既に出ているポップアップの途中でスイッチを切った場合も、それは閉じられる必要があるためです。`OwnerWindow` は Spawn 時にウィンドウが注入します（`GetComponentInParent` は使いません —— `nodeTreeRoot` はウィンドウコンポーネントの外に置けるため、親を辿っても見つかる保証がないからです）。
 - `SetHighlight(bool on, bool instant = false)`（非仮想・唯一の書き込み入口）+ `OnHighlightBegin(bool instant)` / `OnHighlightEnd(bool instant)`（`protected virtual` フック）+ `IsHighlighted` —— **ホバーハイライト**。基底実装は `highlightImage` の alpha を `0` と `highlightAlpha` の間でフェードします。**状態は `SetHighlight` が持ち、見た目はフック側**なので、サブクラスはフックだけをオーバーライドすれば済みます。`SetHighlight` は外部からも呼べます（「あるパス上の全ノードをハイライト」など）。
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` —— クリックコールバック（イベント購読、またはサブクラスでオーバーライドして SE / ダイアログ / ストーリーなどを発火）。
 - `OnSpawn()` / `OnDespawn()` —— `IPoolable` プールコールバック（`OnDespawn` → 自動 `OnUnbindData`。再利用時に古い状態が残らない）。
-- `OnDisable()`（`protected virtual`）—— 非アクティブ化時にポップアップとハイライトを復帰。サブクラスでオーバーライドする場合は必ず `base.OnDisable()` を呼んでください。
+- `OnDisable()`（`protected virtual`）—— 非アクティブ化時にポップアップを閉じ、ハイライトを復帰。サブクラスでオーバーライドする場合は必ず `base.OnDisable()` を呼んでください。
 
 **ハイライト層のプレハブ設定**：`highlightImage` はノード土台の上、アイコン・テキストの下に置き、stretch で全面に広げ、初期 `alpha = 0`、そして **Raycast Target をオフ**にしてください —— alpha が 0 の `Image` でもレイキャストは遮ります（`Image.IsRaycastLocationValid` は既定で `color.a` を見ません）。ハイライト層が外側にはみ出すと隣接ノードのホバーとクリックを奪ってしまいます。デモの 2 つのノードプレハブは各自の土台と同じ sprite を流用しているため、ハイライトの形状が自然にノードと一致します。
 
@@ -210,6 +214,32 @@ protected override void OnHighlightBegin(bool instant)
     base.OnHighlightBegin(instant);   // 解放済みのみ基底のフェードを実行
 }
 ```
+
+### `UINodeInfoPanel`
+
+情報ポップアップのコンポーネント（`MonoBehaviour` + `IPoolable`、1.6.0 以降）。**独立したポップアップ用プレハブ**にアタッチし、`UINodeTreeWindow.infoPanelPrefab` に設定すると、ウィンドウがオブジェクトプール経由で取得・配置・回収まで一元管理します —— ノード側はポップアップを持ちません。
+
+| フィールド | 既定値 | 説明 |
+|------------|--------|------|
+| `canvasGroup` | — | フェードを制御する `CanvasGroup`。空の場合は同じ GameObject から自動取得。 |
+| `fadeInDuration` / `fadeOutDuration` | 0.2 / 0.3 | フェードイン / アウトの長さ（秒）。 |
+| `offsetFromNode` | (0, 120) | **ノード中心**からのオフセット（ノードツリーコンテナ単位、Y 軸は上向き）。 |
+| `nodeNameText` / `nodeDescText` / `iconImage` | — | **任意**の接続先：バインド時にそれぞれ `NodeData.nodeName.ResolveText()` / `nodeDesc.ResolveText()` / `uiIcon` で埋めます。未接続ならスキップ（デモのポップアップ文言は Unity Localization 側で駆動するため、3 つとも未接続）。 |
+
+**主な API**：`Bind(NodeData, NodeTypeData)` / `Unbind()`（`virtual`。オーバーライド時は必ず `base` を呼ぶこと）、`Show(bool instant = false)` / `Hide(bool instant = false)`（**非仮想**）、`GetOffset(NodeData, NodeTypeData)`（`virtual`。ノードタイプ / サイズごとに異なるオフセットを返せます）、読み取り専用の `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`。
+
+**オーバーライド可能なフック**：`OnShowBegin(bool instant)` / `OnHideBegin(bool instant)`（`protected virtual`）—— 基底実装は `canvasGroup` の alpha を 1 / 0 へ補間します。スケールイン、スライドなど独自の出現表現に差し替え可能です。`instant` に関する注意は `UINodeBase` のハイライトフックと同じです。
+
+`Show` / `Hide` を意図的に `virtual` に**していない**理由：`IsVisible` はウィンドウがポップアップを回収する唯一の判断材料であり、サブクラスが `base` を呼び忘れるとポップアップが永久に回収されません（プールのリーク）。状態は非仮想の入口が持ち、見た目はフック側に置いています。
+
+**ポップアップ用プレハブの設定**：
+
+- ルート `RectTransform` の anchor は **(0.5, 0.5)**（レイヤー側の `pivot` 中央と組み合わせることで、ウィンドウは `localPosition` を書くだけで配置できます）。
+- **`blocksRaycasts` はオンにしないでください**（`Awake` で強制的にオフにします）。ポップアップとノードは別のサブツリーにあるため、カーソルを覆った瞬間に `PointerExit` → 非表示 → カーソルがノードへ戻る → `PointerEnter` → 表示、という目に見えるちらつきのループになります。
+- レイヤーはウィンドウ自身の `RectTransform` 配下（最後の兄弟）に自動生成されます。**ScrollView の `Viewport` の外**である必要があります —— さもないと `Mask` に切られ、さらに「他のノードに隠れる」問題に逆戻りします。別の場所に置きたい場合は `infoPanelLayer` で指定してください。
+- ポップアップは**キャンバスのスケールに追従しません**：オフセットはレイヤー空間で適用されるため、ノードツリーを拡大縮小してもポップアップのサイズとオフセットは変わりません。これは意図的な仕様です —— ポップアップは読ませるものであり、読めなくなるまで縮むべきではないからです。
+
+**複数同時表示**：ポップアップは `nodeId` で索引されるため、複数ノードに対して同時に `ShowNodeInfoPanel` できます。`Hide` はフェードアウトを開始するだけでプールへは戻さず、ウィンドウが `LateUpdate` で `IsRecyclable` をポーリングして回収します —— したがってフェードアウト中に再びホバーしても同じインスタンスを再利用してフェードインし直すため、ちらつきません。
 
 ### `UIScrollingBackground`
 

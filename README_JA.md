@@ -72,7 +72,7 @@ Ale Node Tree は `Unity` 向けの**ビジュアルなノードツリープラ�
 | **データ** | ノード / タイプ / タグ | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件と状態** | 条件判定と状態接続 | `ConditionExpression`(Toolkit)、`INodeTreeStateSource`、`NodeTreeSaveDataManager`、判定器 `NodeFinished` / `NodeUnlocked` / `NodeHasTag` |
 | **セーブ** | ノードのタグ状態 | `NodeTreeSaveDataManager` |
-| **ランタイム UI** | ノードツリー表示・ホバーハイライト・無限スクロール背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **ランタイム UI** | ノードツリー表示・ホバーハイライト・情報ポップアップ・無限スクロール背景 | `UINodeTreeWindow`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **エディタ** | ビジュアル編集、複数選択とバッチ編集 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
 > 各モジュールのフィールド・API・使い方は[ドキュメント](#-ドキュメント)を参照。

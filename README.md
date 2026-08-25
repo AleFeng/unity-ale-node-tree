@@ -72,7 +72,7 @@ Ale Node Tree 是一款面向 `Unity` 的**可视化节点树插件**，用于�
 | **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件与状态** | 挂载条件与判定 | `ConditionExpression`(Toolkit)、`INodeTreeStateSource`、`NodeTreeConditionContext`、内置判定器 `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
 | **存档** | 节点标签状态 | `NodeTreeSaveDataManager` |
-| **运行时 UI** | 节点树展示、悬停高亮与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **运行时 UI** | 节点树展示、悬停高亮、信息弹窗与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑、多选与批量编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 
 > 每个模块的字段、API 与用法见 [详细文档](#-详细文档)。

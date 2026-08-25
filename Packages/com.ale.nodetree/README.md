@@ -25,7 +25,7 @@
 | **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件** | 接入 Toolkit `Ale.Condition` 与内置判定器 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、`NodeFinishedEvaluator`、`NodeUnlockedEvaluator`、`NodeHasTagEvaluator` |
 | **存档** | 节点状态标签 | `NodeTreeSaveDataManager` |
-| **运行时 UI** | 节点树展示、悬停高亮与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **运行时 UI** | 节点树展示、悬停高亮、信息弹窗与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **Shader** | 流光连线 | `NodeTree/NodeLineFlow` |
 
@@ -176,24 +176,28 @@ save.Load(json);
 - **按节点类型维护对象池**（基于 `com.ale.toolkit` 的 `ToolkitGameObjectPool`），通过**视口裁剪按需 Spawn / Despawn** 节点 UI；
 - **为每种节点类型合并生成连线 Mesh**（减少 DrawCall），UV 配合 `NodeTree/NodeLineFlow` 做流光；
 - 在 `LateUpdate` 中按脏标记按需重建连线；
+- **统一管理信息弹窗**（1.6.0 起）：`infoPanelPrefab` 指定弹窗预制体，窗口自动在自己下面建 `InfoPanelLayer`（ScrollView 之外、最后一个兄弟）与对象池；悬停时按节点位置定位，并随滚动 / 缩放跟随。详见 [`UINodeInfoPanel`](#uinodeinfopanel)。
 - `refreshStatesOnInit`：勾选后在 `InitTree` 时自动调用 `RefreshAllNodeStates`（按存档与条件刷新所有自动标签）。
 - `forceUnlockForTest` + `forceUnlockTags`【测试用】（1.5.2 起，原 `unlockAllForTest`）：勾选开关后，`InitTree` 给每个节点挂上 `forceUnlockTags` 里的标签，绕过解锁条件与存档状态，便于查看整棵树的完整结构。**列表留空则挂上词表（`NodeTreeData.tags`）里的全部标签**——零配置即生效，宿主改了标签名也不会让开关静默失效（节点能不能进由宿主说了算，只挂 `Unlock` 对用自定义标签判定的宿主毫无作用）。需要收窄时再逐条填写。只往内存态里加标签，不改存档文件；发布前应保持关闭。
 
-**主要 API**：`InitTree(NodeTreeData configOverride = null)`（初始化 / 重建整棵树）、`RefreshAllNodeStates()`（对当前 `config` 调 `NodeTreeSaveDataManager.RefreshAllNodeStates`）、`SelectNode(string nodeId)`、`RefreshVisibility()`（重算视口裁剪）、`MarkLineDirty()`（标记连线待重建）。
+**主要 API**：`InitTree(NodeTreeData configOverride = null)`（初始化 / 重建整棵树）、`RefreshAllNodeStates()`（对当前 `config` 调 `NodeTreeSaveDataManager.RefreshAllNodeStates`）、`SelectNode(string nodeId)`、`RefreshVisibility()`（重算视口裁剪）、`MarkLineDirty()`（标记连线待重建）、`ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)`（信息弹窗；悬停会自动调用，也可由外部直接调用来「钉住某几个节点的弹窗」）。
 
 ### `UINodeBase`
 
-节点 UI 基类（`MonoBehaviour` + `IPoolable` + 指针事件）。挂到节点 UI 预制体上，由 `UINodeTreeWindow` 通过对象池生成并绑定数据。功能：节点图标显示、名称 / 描述文本（`AttributeValue.ResolveText()` 解析，填充 `TMP_Text`）、鼠标悬停信息弹窗淡入淡出与**悬停高亮**（均基于 `com.ale.toolkit` 中央 Tween）、点击回调。
+节点 UI 基类（`MonoBehaviour` + `IPoolable` + 指针事件）。挂到节点 UI 预制体上，由 `UINodeTreeWindow` 通过对象池生成并绑定数据。功能：节点图标显示、名称 / 描述文本（`AttributeValue.ResolveText()` 解析，填充 `TMP_Text`）、**悬停高亮**（基于 `com.ale.toolkit` 中央 Tween）、悬停时向所属窗口请求**信息弹窗**、点击回调。
+
+> 1.6.0 起信息弹窗**不再由节点持有**，改由 `UINodeTreeWindow` 统一管理，见 [`UINodeInfoPanel`](#uinodeinfopanel)。
 
 **可重写虚方法与事件**：
 
 - `OnBindData(NodeData data, NodeTypeData type)` / `OnUnbindData()` —— 绑定 / 解绑数据（`OnDespawn` 自动解绑）。
 - `OnNodeSelected()` / `OnNodeDeselected()` —— 选中 / 取消选中的视觉反馈。
-- `OnPointerEnterNode()` / `OnPointerExitNode()` —— 悬停：弹窗淡入 / 淡出，并进入 / 退出高亮态。
+- `OnPointerEnterNode()` / `OnPointerExitNode()` —— 悬停：请求窗口显示 / 收起信息弹窗，并进入 / 退出高亮态。
+- `ShowInfoPanel()` / `HideInfoPanel()`（`protected virtual`）+ 序列化开关 `showInfoPanelOnHover` + `OwnerWindow` —— **信息弹窗**。基类实现是转调 `OwnerWindow.ShowNodeInfoPanel(nodeData.nodeId)` / `HideNodeInfoPanel(...)`；子类可重写以附加条件（如未解锁的节点不弹）。`HideInfoPanel` 刻意**不看**该开关：开关在弹窗已弹出后才被关掉时，那一个仍要能收回去。`OwnerWindow` 由窗口在 Spawn 时注入（不走 `GetComponentInParent` —— `nodeTreeRoot` 允许挂在窗口组件之外，向上找不保证能找到）。
 - `SetHighlight(bool on, bool instant = false)`（非虚，唯一写入口）+ `OnHighlightBegin(bool instant)` / `OnHighlightEnd(bool instant)`（`protected virtual` 钩子）+ `IsHighlighted` —— **悬停高亮**。基类实现是把 `highlightImage` 的 alpha 在 `0` 与 `highlightAlpha` 之间淡入淡出；**状态在 `SetHighlight` 维护、表现在钩子里**，子类只重写钩子即可。`SetHighlight` 也可由外部调用（如「高亮某条路径上的全部节点」）。
 - `OnNodeClicked(PointerEventData)` + `event Action<UINodeBase> Clicked` —— 点击回调（可订阅事件，或子类重写触发音效 / 对话 / 剧情等）。
 - `OnSpawn()` / `OnDespawn()` —— `IPoolable` 池回调（`OnDespawn` → 自动 `OnUnbindData`，复用不残留旧状态）。
-- `OnDisable()`（`protected virtual`）—— 停用时复位弹窗与高亮；子类重写务必调用 `base.OnDisable()`。
+- `OnDisable()`（`protected virtual`）—— 停用时收起弹窗并复位高亮；子类重写务必调用 `base.OnDisable()`。
 
 **高亮层预制体配置**：`highlightImage` 建议置于节点底板之上、图标与文字之下，stretch 铺满，初始 `alpha = 0`，并**关闭 Raycast Target** —— alpha 为 0 的 `Image` 依然阻挡射线（`Image.IsRaycastLocationValid` 默认不看 `color.a`），高亮层一旦外扩就会挤占相邻节点的悬停与点击。Demo 的两个节点预制体直接复用了各自底板的 sprite，高亮形状天然与节点吻合。
 
@@ -211,6 +215,32 @@ protected override void OnHighlightBegin(bool instant)
     base.OnHighlightBegin(instant);   // 已解锁才走基类的淡入
 }
 ```
+
+### `UINodeInfoPanel`
+
+信息弹窗组件（`MonoBehaviour` + `IPoolable`，1.6.0 起）。挂在**独立的弹窗预制体**上，配到 `UINodeTreeWindow.infoPanelPrefab`，由窗口用对象池统一取用、定位与回收 —— 节点自身不再持有弹窗。
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `canvasGroup` | — | 控制淡入淡出的 `CanvasGroup`；为空时自动取本物体上的。 |
+| `fadeInDuration` / `fadeOutDuration` | 0.2 / 0.3 | 淡入 / 淡出时长（秒）。 |
+| `offsetFromNode` | (0, 120) | 弹窗相对**节点中心**的偏移（节点树容器单位，Y 轴向上）。 |
+| `nodeNameText` / `nodeDescText` / `iconImage` | — | **可选**接线：绑定时分别用 `NodeData.nodeName.ResolveText()` / `nodeDesc.ResolveText()` / `uiIcon` 填充；不接线即跳过（Demo 的弹窗文本由 Unity Localization 驱动，三个都不接）。 |
+
+**主要 API**：`Bind(NodeData, NodeTypeData)` / `Unbind()`（`virtual`，重写务必调 `base`）、`Show(bool instant = false)` / `Hide(bool instant = false)`（**非虚**）、`GetOffset(NodeData, NodeTypeData)`（`virtual`，可按节点类型 / 尺寸返回不同偏移）、只读属性 `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`。
+
+**可重写钩子**：`OnShowBegin(bool instant)` / `OnHideBegin(bool instant)`（`protected virtual`）—— 基类实现是把 `canvasGroup` 的 alpha 补间到 1 / 0；子类可重写以实现缩放弹出、位移、描边扫光等自定义出现效果。`instant` 的注意事项同 `UINodeBase` 的高亮钩子。
+
+`Show` / `Hide` 刻意**不是** `virtual`：`IsVisible` 是窗口回收弹窗的唯一依据，子类重写时漏调 `base` 会让弹窗永不回收（对象池泄漏），因此状态由非虚入口维护、表现交给钩子。
+
+**弹窗预制体配置**：
+
+- 根 `RectTransform` 的 anchor 取 **(0.5, 0.5)**（与弹窗层的 `pivot` 居中配合，窗口写 `localPosition` 即可定位）。
+- **不必也不要开 `blocksRaycasts`**：组件在 `Awake` 里会强制关掉它。弹窗与节点分属两棵子树，一旦挡住光标就会 `PointerExit` → 隐藏 → 光标回到节点 → `PointerEnter` → 显示，形成肉眼可见的闪烁死循环。
+- 弹窗层由窗口自动创建在其 `RectTransform` 下（最后一个兄弟），**必须在 ScrollView 的 `Viewport` 之外** —— 否则会被其 `Mask` 裁剪，且回到「被别的节点盖住」的老问题。需要放在别处时用 `infoPanelLayer` 指定。
+- 弹窗**不随画布缩放**：偏移施加在弹窗层空间，缩放节点树画布时弹窗的尺寸与偏移保持不变。这是有意为之 —— 弹窗是给人读的，不该跟着缩到看不清。
+
+**同时显示多个**：弹窗按 `nodeId` 索引，可对多个节点同时 `ShowNodeInfoPanel`。`Hide` 只是开始淡出、不立即归还池，窗口在 `LateUpdate` 里轮询 `IsRecyclable` 才回收 —— 因此淡出途中重新悬停会复用同一实例淡回去，不会闪。
 
 ### `UIScrollingBackground`
 

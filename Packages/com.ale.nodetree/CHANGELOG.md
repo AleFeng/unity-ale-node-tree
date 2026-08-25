@@ -6,6 +6,42 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.6.0] - 2026-08-25
+
+信息弹窗从节点内部拆出，改由 `UINodeTreeWindow` 用对象池统一管理。**本版含破坏性变更**（版本号按项目约定停留在次版本位），升级前请先读下方迁移步骤。
+
+### 破坏性变更
+
+- **`UINodeBase` 移除内置信息弹窗**：删去序列化字段 `infoPanel` / `fadeInDuration` / `fadeOutDuration` 与全部弹窗实现（`ResetInfoPanel` / `InfoPanelFadeIn` / `InfoPanelFadeOut`），**不保留兼容路径**。
+
+  **三步迁移**：① 把节点预制体里的 `InfoPanel` 子树抽成独立预制体，根上挂 `UINodeInfoPanel`；② 接到 `UINodeTreeWindow.infoPanelPrefab`；③ 节点预制体删掉原来的 `InfoPanel` 子物体。资产 YAML 里遗留的三个键在 Unity 反序列化时自动丢弃，无需手工清理。
+
+  **为什么要拆**：弹窗作为节点的子物体，渲染顺序跟着节点在 `NodeContainer` 里的兄弟序走，而节点是按视口裁剪**动态** Spawn 的、顺序不可控 —— 后 Spawn 的节点会盖住先 Spawn 节点的弹窗，于是「弹窗被别的节点挡住」时有时无；同时弹窗还在 ScrollView 的 `Viewport` 的 `Mask` 之内，靠近视口边缘会被切掉一半。此外每个节点预制体都要各存一份弹窗层级，改一次得改所有预制体，运行时每个激活节点也都背着一份用不上的弹窗。
+
+  ⚠ 重写过 `OnPointerEnterNode()` / `OnPointerExitNode()` 的子类**无需改动**（基类语义不变，只是内部改成向窗口发请求）；重写过 `OnDisable()` 的子类仍须调用 `base.OnDisable()`。
+
+### 新增
+
+- **`UINodeInfoPanel`**（`MonoBehaviour` + `IPoolable`）：独立的信息弹窗组件，职责只有三件 —— 持有内容接线、淡入淡出、汇报自己能否被回收。序列化字段 `canvasGroup` / `fadeInDuration` / `fadeOutDuration` / `offsetFromNode`（相对**节点中心**的偏移，默认 `(0, 120)`）与三个**可选**的内容接线 `nodeNameText` / `nodeDescText` / `iconImage`（不接线即跳过）。`Bind` / `Unbind` / `GetOffset` 为 `virtual`；`Show(bool)` / `Hide(bool)` **非虚**，表现交给 `OnShowBegin(bool)` / `OnHideBegin(bool)` 两个 `protected virtual` 钩子 —— `IsVisible` 是窗口回收弹窗的唯一依据，子类漏调 `base` 会让弹窗永不回收（对象池泄漏），故用非虚入口挡住。
+- **`UINodeTreeWindow` 统一管理弹窗**：新增序列化字段 `infoPanelPrefab`（留空则整套弹窗功能静默关闭）/ `infoPanelLayer`（留空则自动创建）/ `infoPanelPreload`，以及三个公开方法 `ShowNodeInfoPanel(string)` / `HideNodeInfoPanel(string)` / `HideAllNodeInfoPanels(bool)`。弹窗按 `nodeId` 索引，**支持同时显示多个**；悬停时按节点位置定位，并在 `LateUpdate` 里跟随滚动 / 缩放。
+- **`UINodeBase.OwnerWindow`**（`public get` / `internal set`，由窗口在 Spawn 时注入）与序列化开关 `showInfoPanelOnHover`（默认 `true`），以及 `ShowInfoPanel()` / `HideInfoPanel()` 两个 `protected virtual` 转调方法 —— 子类可重写以附加条件（如未解锁的节点不弹）。
+- **Demo 新增 `UINodeInfoPanel.prefab`**：由原 `UINodeNomal` 的 `InfoPanel` 子树抽出（两个节点预制体的弹窗在 sprite、颜色、PPU 与本地化 key 上完全一致，合并为一份无损失），两个节点预制体的 `InfoPanel` 子物体已移除，窗口预制体已接线。`Assets/Demo` 与 `Samples~/Demo` 两份拷贝已同步。
+
+### 变更
+
+- **弹窗层放在 ScrollView 之外**：窗口在自己的 `RectTransform` 下自动创建 `InfoPanelLayer`（最后一个兄弟、铺满、`pivot` 居中、整层 `blocksRaycasts = false`），因此弹窗**压在所有节点之上**且**不再被 `Viewport` 的 `Mask` 裁剪**。本组件不在 `RectTransform` 上时会告警并回落 `nodeTreeRoot`，此时请手动指定 `infoPanelLayer`。
+- **弹窗恒不阻挡射线**（`UINodeInfoPanel.Awake` 强制 `blocksRaycasts = false`）。旧实现在淡入时置 `true` 是安全的 —— 弹窗是节点的子物体，uGUI 沿层级向公共祖先派发，指针落在弹窗上不会触发节点的 `PointerExit`。拆出去之后二者分属两棵子树，一旦挡住光标就会 `PointerExit` → 隐藏 → 光标回到节点 → `PointerEnter` → 显示，形成肉眼可见的闪烁死循环。
+- **弹窗不随画布缩放**：偏移施加在弹窗层空间，缩放节点树画布时弹窗的尺寸与偏移保持不变。这是有意为之 —— 弹窗是给人读的，不该跟着缩到看不清。
+- **回收走轮询而非补间回调**：`Hide()` 只开始淡出、不立即归还池，窗口在 `LateUpdate` 里轮询 `IsRecyclable` 才回收。好处是淡出途中重新悬停能复用同一实例淡回去、不闪；也避免了「完成回调在时长 ≤ 0 与 `Kill(true)` 两条路径上同步触发」导致的遍历中途改集合。
+- **既有节点预制体无需迁移**（除上述三步）：新增的 `showInfoPanelOnHover` 是纯增量字段，资产 YAML 缺该键时 Unity 反序列化保留 C# 初始值 `true`。
+
+### API
+
+- `UINodeBase` **移除**：`protected CanvasGroup infoPanel`、`protected float fadeInDuration`、`protected float fadeOutDuration`。
+- `UINodeBase` **新增**：`public UINodeTreeWindow OwnerWindow { get; internal set; }`、`protected bool showInfoPanelOnHover`、`protected virtual void ShowInfoPanel()`、`protected virtual void HideInfoPanel()`。
+- `UINodeTreeWindow` **新增**：`public UINodeInfoPanel ShowNodeInfoPanel(string nodeId)`、`public void HideNodeInfoPanel(string nodeId)`、`public void HideAllNodeInfoPanels(bool instant = false)`；序列化字段 `infoPanelPrefab` / `infoPanelLayer` / `infoPanelPreload`。
+- **新类** `UINodeInfoPanel`：`public virtual void Bind(NodeData, NodeTypeData)`、`public virtual void Unbind()`、`public void Show(bool instant = false)`、`public void Hide(bool instant = false)`、`public virtual Vector2 GetOffset(NodeData, NodeTypeData)`、`protected virtual void OnShowBegin(bool)`、`protected virtual void OnHideBegin(bool)`、`protected virtual void OnDisable()`、只读属性 `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`。
+
 ## [1.5.2] - 2026-08-24
 
 「全部解锁」测试开关此前对使用自定义标签的宿主不起作用，现在改为可配置。
