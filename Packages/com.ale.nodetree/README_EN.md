@@ -243,6 +243,8 @@ The info-popup component (`MonoBehaviour` + `IPoolable`, since 1.6.0). Attach it
 - **The offset lives on the window**: a popup lands at the node centre plus `UINodeTreeWindow.infoPanelOffset` (default `(0, 120)`, i.e. above the node). `NodeData.position` already *is* the node centre, so no size-based adjustment is needed.
 - Popups **do not scale with the canvas**: the offset is applied in layer space, so zooming the node-tree canvas leaves popup size and offset untouched. This is deliberate — a popup is meant to be read, not shrunk out of legibility.
 
+**No description, no popup**: before taking an instance from the pool the window resolves the node's `nodeDesc` (`ResolveText()`); when it is empty or pure whitespace nothing is shown and no instance is created — an empty padded box carries no information and covers the nodes underneath. ⚠ The check looks at **`nodeDesc` only**: if your popup's copy comes from somewhere else (e.g. a `LocalizeStringEvent` with fixed text, as in the demo), the node still needs a `nodeDesc` or it will never pop.
+
 **Showing several at once**: popups are keyed by `nodeId`, so you can `ShowNodeInfoPanel` several nodes at the same time. `Hide` only starts the fade-out and does not return the instance to the pool immediately; the window polls `IsRecyclable` in `LateUpdate` and recycles then — so re-hovering mid-fade reuses the same instance and fades it back in without a flicker.
 
 ### `UIScrollingBackground`

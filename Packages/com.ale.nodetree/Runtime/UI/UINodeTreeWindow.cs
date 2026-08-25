@@ -731,15 +731,26 @@ namespace Ale.NodeTree.Runtime
         /// 显示指定节点的信息弹窗并淡入。已在显示（或正在淡出）的节点复用同一实例，不会重复取用。
         /// <para>悬停时由 <see cref="UINodeBase"/> 转调；也可由外部直接调用，
         /// 例如「把某条路径上的几个节点的弹窗一起钉住」。</para>
+        /// <para><b>描述为空的节点不弹</b>：见 <see cref="HasInfoPanelText"/>。</para>
         /// </summary>
         /// <param name="nodeId">节点 ID。</param>
-        /// <returns>该节点的弹窗实例；未配置预制体 / 弹窗层缺失 / 节点不存在时返回 null。</returns>
+        /// <returns>
+        /// 该节点的弹窗实例；未配置预制体 / 弹窗层缺失 / 节点不存在 / <b>节点描述为空</b>时返回 null。
+        /// </returns>
         public UINodeInfoPanel ShowNodeInfoPanel(string nodeId)
         {
             if (string.IsNullOrEmpty(nodeId) || !config) return null;
 
             var node = config.GetNode(nodeId);
             if (node == null) return null;
+
+            // 描述为空就别弹：一个只有内边距的空框既给不出信息，又会挡住下面的节点。
+            // 已经弹出来的也要收回去 —— 覆盖「描述在运行时被清空后又悬停一次」这条路径。
+            if (!HasInfoPanelText(node))
+            {
+                HideNodeInfoPanel(nodeId);
+                return null;
+            }
 
             var panel = FindInfoPanel(nodeId);
             if (!panel)
@@ -839,6 +850,26 @@ namespace Ale.NodeTree.Runtime
 
             panel.Rect.localPosition = new Vector3(layerLocal.x + infoPanelOffset.x,
                                                    layerLocal.y + infoPanelOffset.y, 0f);
+        }
+
+        /// <summary>
+        /// 节点是否有可显示的描述文本。<see cref="ShowNodeInfoPanel"/> 在取用实例<b>之前</b>调用，
+        /// 为 false 就完全不弹（不占池、不建实例）。
+        ///
+        /// <para>取 <see cref="NodeData.nodeDesc"/> 经 <c>ResolveText()</c> 的结果 —— 启用 toolkit 本地化时
+        /// 是当前语言的译文，否则是纯文本 fallback；两者皆空时它返回空串。</para>
+        ///
+        /// <para>纯空白（全是空格 / 换行）与空串<b>同等对待</b>：它们在观感上没有区别，却同样会弹出一个
+        /// 只有内边距的空框。</para>
+        ///
+        /// <para>⚠ 判据只看 <c>nodeDesc</c>。若弹窗的文案<b>不是</b>由它驱动（例如挂
+        /// <c>LocalizeStringEvent</c> 显示固定文本），那么节点的 <c>nodeDesc</c> 仍需填写，否则一律不弹。</para>
+        /// </summary>
+        private static bool HasInfoPanelText(NodeData node)
+        {
+            if (node == null || node.nodeDesc == null) return false;
+
+            return !string.IsNullOrWhiteSpace(node.nodeDesc.ResolveText());
         }
 
         /// <summary>在激活弹窗中按节点 ID 查找；没有则返回 null。数量极少，顺序查找即可。</summary>

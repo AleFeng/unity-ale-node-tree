@@ -31,6 +31,7 @@
 
 - **弹窗层放在 ScrollView 之外**：窗口在自己的 `RectTransform` 下自动创建 `InfoPanelLayer`（最后一个兄弟、铺满、`pivot` 居中、整层 `blocksRaycasts = false`），因此弹窗**压在所有节点之上**且**不再被 `Viewport` 的 `Mask` 裁剪**。本组件不在 `RectTransform` 上时会告警并回落 `nodeTreeRoot`，此时请手动指定 `infoPanelLayer`。
 - **弹窗恒不阻挡射线**（`UINodeInfoPanel.Awake` 强制 `blocksRaycasts = false`）。旧实现在淡入时置 `true` 是安全的 —— 弹窗是节点的子物体，uGUI 沿层级向公共祖先派发，指针落在弹窗上不会触发节点的 `PointerExit`。拆出去之后二者分属两棵子树，一旦挡住光标就会 `PointerExit` → 隐藏 → 光标回到节点 → `PointerEnter` → 显示，形成肉眼可见的闪烁死循环。
+- **描述为空的节点不弹窗**：`ShowNodeInfoPanel` 在取用池实例**之前**先解析 `NodeData.nodeDesc`（`ResolveText()`，启用本地化时取当前语言译文），为空或纯空白则直接返回 `null`、完全不弹 —— 一个只有内边距的空框既给不出信息，又会挡住下面的节点。若该节点此刻正显示着弹窗（描述被运行时清空后又悬停一次），会一并收起。⚠ 判据只看 `nodeDesc`：弹窗文案若不由它驱动（如挂 `LocalizeStringEvent` 显示固定文本），节点的 `nodeDesc` 仍需填写，否则一律不弹。
 - **弹窗位置 = 节点中心 + `infoPanelOffset`**：`NodeData.position` 本就是节点中心，无需再按节点尺寸折算；偏移配在**窗口**上而非弹窗预制体上，一处改全树生效。
 - **弹窗不随画布缩放**：偏移施加在弹窗层空间，缩放节点树画布时弹窗的尺寸与偏移保持不变。这是有意为之 —— 弹窗是给人读的，不该跟着缩到看不清。
 - **回收走轮询而非补间回调**：`Hide()` 只开始淡出、不立即归还池，窗口在 `LateUpdate` 里轮询 `IsRecyclable` 才回收。好处是淡出途中重新悬停能复用同一实例淡回去、不闪；也避免了「完成回调在时长 ≤ 0 与 `Kill(true)` 两条路径上同步触发」导致的遍历中途改集合。

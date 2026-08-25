@@ -240,6 +240,8 @@ protected override void OnHighlightBegin(bool instant)
 - **位置配在窗口上**：弹窗落点 = 节点中心 + `UINodeTreeWindow.infoPanelOffset`（默认 `(0, 120)`，即节点上方）。`NodeData.position` 本就是节点中心，无需按节点尺寸折算。
 - 弹窗**不随画布缩放**：偏移施加在弹窗层空间，缩放节点树画布时弹窗的尺寸与偏移保持不变。这是有意为之 —— 弹窗是给人读的，不该跟着缩到看不清。
 
+**描述为空即不弹**：窗口在取用池实例**之前**会先解析节点的 `nodeDesc`（`ResolveText()`），为空或纯空白就直接不弹、连实例都不建 —— 空框既给不出信息又挡视线。⚠ 判据**只看 `nodeDesc`**：弹窗文案若不由它驱动（例如像 Demo 那样挂 `LocalizeStringEvent` 显示固定文本），节点的 `nodeDesc` 仍需填写，否则一律不弹。
+
 **同时显示多个**：弹窗按 `nodeId` 索引，可对多个节点同时 `ShowNodeInfoPanel`。`Hide` 只是开始淡出、不立即归还池，窗口在 `LateUpdate` 里轮询 `IsRecyclable` 才回收 —— 因此淡出途中重新悬停会复用同一实例淡回去，不会闪。
 
 ### `UIScrollingBackground`
