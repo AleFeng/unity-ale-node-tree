@@ -201,7 +201,7 @@ namespace Ale.NodeTree.Runtime
             _highlightFade.Kill();
             _highlightFade = ToolkitTween.FadeGraphic(
                 highlightImage, highlightAlpha,
-                instant ? 0f : highlightFadeInDuration, EToolkitEase.OutQuad);
+                instant ? 0f : highlightFadeInDuration);
         }
 
         /// <summary>

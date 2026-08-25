@@ -111,7 +111,7 @@ namespace Ale.NodeTree.Runtime
         /// <summary>返回指定节点当前的标签集合（只读；无记录时为空集合）。</summary>
         public IReadOnlyCollection<string> GetTags(string nodeId)
             => !string.IsNullOrEmpty(nodeId) && _tagSets.TryGetValue(nodeId, out var set)
-                ? (IReadOnlyCollection<string>)set
+                ? set
                 : Array.Empty<string>();
 
         /// <summary>清空指定节点的全部标签记录。</summary>
@@ -186,6 +186,8 @@ namespace Ale.NodeTree.Runtime
         /// 不通过则不挂、返回 false。已挂载则直接返回 true。
         /// </summary>
         /// <param name="config">节点所属的 NodeTreeData（用于定位节点及其标签规则）。</param>
+        /// <param name="nodeId">节点的唯一标识符。</param>
+        /// <param name="tag">要挂载的标签名称。</param>
         public bool TrySetTag(NodeTreeData config, string nodeId, string tag)
         {
             if (config == null || string.IsNullOrEmpty(nodeId) || string.IsNullOrEmpty(tag)) return false;

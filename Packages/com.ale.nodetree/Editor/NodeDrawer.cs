@@ -325,10 +325,10 @@ namespace Ale.NodeTree.Editor
         private static GUIStyle _nodeLabelStyle; // 节点标签样式（缓存，避免每节点每帧新建）
         private static Mesh     _lineMesh;       // 连线绘制复用的 Mesh（Clear+重填，避免每连线每帧 new/Destroy）
         // 编辑器连线绘制复用缓冲（避免每连线每帧 new List / new Color[]）
-        private static readonly List<Vector3> _edVerts  = new List<Vector3>(64);
-        private static readonly List<Vector2> _edUvs    = new List<Vector2>(64);
-        private static readonly List<int>     _edTris   = new List<int>(96);
-        private static readonly List<Color>   _edColors = new List<Color>(64);
+        private static readonly List<Vector3> EdVerts  = new List<Vector3>(64);
+        private static readonly List<Vector2> EdUvs    = new List<Vector2>(64);
+        private static readonly List<int>     EdTris   = new List<int>(96);
+        private static readonly List<Color>   EdColors = new List<Color>(64);
         private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
         private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
         private static readonly int Cull = Shader.PropertyToID("_Cull");
@@ -741,7 +741,7 @@ namespace Ale.NodeTree.Editor
 
                     // 各向异性半轴（含缩放）：X / Y 任一方向的节点尺寸变化都会反映到箭头位置上。
                     // 旧写法取 Min(w, h) 的内切圆半径，X 放大时会被 Y 钳住而不动。
-                    Vector2 childHalf = childType.resolution * 0.5f * canvas.Zoom;
+                    Vector2 childHalf = childType.resolution * (canvas.Zoom * 0.5f);
 
                     GetArrowTipAndDir(fromScreen, toScreen,
                         childType.line, config.layoutDirection, childHalf,
@@ -827,10 +827,10 @@ namespace Ale.NodeTree.Editor
 
             float halfWidth = lineStyle.lineWidth * zoom * 0.5f;
 
-            _edVerts.Clear(); _edUvs.Clear(); _edTris.Clear();
-            var verts = _edVerts;
-            var uvs   = _edUvs;
-            var tris  = _edTris;
+            EdVerts.Clear(); EdUvs.Clear(); EdTris.Clear();
+            var verts = EdVerts;
+            var uvs   = EdUvs;
+            var tris  = EdTris;
 
             var f3 = new Vector3(from.x, from.y, 0f);
             var t3 = new Vector3(to.x,   to.y,   0f);
@@ -861,9 +861,9 @@ namespace Ale.NodeTree.Editor
 
             // 颜色写入顶点色（Hidden/Internal-Colored 依据顶点色着色，无需逐实例材质）
             var color = colorOverride ?? Color.white;
-            _edColors.Clear();
-            for (int i = 0; i < verts.Count; i++) _edColors.Add(color);
-            mesh.SetColors(_edColors);
+            EdColors.Clear();
+            for (int i = 0; i < verts.Count; i++) EdColors.Add(color);
+            mesh.SetColors(EdColors);
 
             BeginGLClip();
             GetGLMat().SetPass(0);

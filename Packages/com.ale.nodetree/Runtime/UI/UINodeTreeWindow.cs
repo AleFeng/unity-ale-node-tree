@@ -223,9 +223,9 @@ namespace Ale.NodeTree.Runtime
                 // Unlock 无条件挂：词表被改过、没有这一项的工程也要保持既有行为
                 save.AddTag(node.nodeId, NodeTreeTags.Unlock);
                 if (config.tags == null) continue;
-                foreach (var tag in config.tags)
-                    if (tag != null && !string.IsNullOrEmpty(tag.tagName))
-                        save.AddTag(node.nodeId, tag.tagName);
+                foreach (var nodeTagData in config.tags)
+                    if (nodeTagData != null && !string.IsNullOrEmpty(nodeTagData.tagName))
+                        save.AddTag(node.nodeId, nodeTagData.tagName);
             }
         }
 

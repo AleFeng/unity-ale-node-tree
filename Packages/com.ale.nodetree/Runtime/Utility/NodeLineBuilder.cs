@@ -16,20 +16,20 @@ namespace Ale.NodeTree.Runtime
     public static class NodeLineBuilder
     {
         // ── 复用 scratch 缓冲（主线程顺序调用；避免每类型/每段的堆分配造成 GC）──
-        private static readonly List<Vector3> _sbVerts = new List<Vector3>(256); // 合并 Mesh 顶点
-        private static readonly List<Vector2> _sbUvs   = new List<Vector2>(256); // 合并 Mesh UV
-        private static readonly List<int>     _sbTris  = new List<int>(512);     // 合并 Mesh 索引
+        private static readonly List<Vector3> SbVerts = new List<Vector3>(256); // 合并 Mesh 顶点
+        private static readonly List<Vector2> SbUvs   = new List<Vector2>(256); // 合并 Mesh UV
+        private static readonly List<int>     SbTris  = new List<int>(512);     // 合并 Mesh 索引
 
         private static Vector3[] _curvePoints = new Vector3[64]; // 曲线采样点（grow-only）
         private static float[]   _curveArc    = new float[64];   // 曲线累积弧长（grow-only）
 
-        private static readonly Vector3[]     _polyRaw  = new Vector3[4];       // 折线原始 4 点
-        private static readonly List<Vector3> _polyPath = new List<Vector3>(4); // 折线去重后路径
+        private static readonly Vector3[]     PolyRaw  = new Vector3[4];       // 折线原始 4 点
+        private static readonly List<Vector3> PolyPath = new List<Vector3>(4); // 折线去重后路径
         private static float[]   _polyArc  = new float[4];  // 折线累积弧长（实际 ≤4）
         private static Vector3[] _polyPerp = new Vector3[3]; // 折线各段法线（实际 ≤3）
 
-        private const float kMinSegLen   = 0.01f;                  // 最小有效段长（像素）
-        private const float kMinSegLenSq = kMinSegLen * kMinSegLen;
+        private const float KMinSegLen   = 0.01f;                  // 最小有效段长（像素）
+        private const float KMinSegLenSq = KMinSegLen * KMinSegLen;
 
         private static void EnsureSize(ref Vector3[] arr, int size)
         { if (arr.Length < size) arr = new Vector3[Mathf.NextPowerOfTwo(size)]; }
@@ -50,31 +50,31 @@ namespace Ale.NodeTree.Runtime
             float halfWidth = lineData.lineWidth * 0.5f;
 
             // 复用静态 scratch 缓冲，避免每类型一组 new List
-            _sbVerts.Clear(); _sbUvs.Clear(); _sbTris.Clear();
+            SbVerts.Clear(); SbUvs.Clear(); SbTris.Clear();
 
             foreach (var (from, to) in segments)
             {
-                if ((to - from).sqrMagnitude < kMinSegLenSq) continue; // 退化段（重合/自环）跳过
+                if ((to - from).sqrMagnitude < KMinSegLenSq) continue; // 退化段（重合/自环）跳过
                 switch (lineData.lineType)
                 {
                     case ELineType.Straight:
-                        AppendStraightSegment(from, to, halfWidth, _sbVerts, _sbUvs, _sbTris);
+                        AppendStraightSegment(from, to, halfWidth, SbVerts, SbUvs, SbTris);
                         break;
                     case ELineType.Curve:
-                        AppendCurveSegment(from, to, halfWidth, dir, _sbVerts, _sbUvs, _sbTris);
+                        AppendCurveSegment(from, to, halfWidth, dir, SbVerts, SbUvs, SbTris);
                         break;
                     case ELineType.Polyline:
-                        AppendPolylineSegment(from, to, halfWidth, dir, _sbVerts, _sbUvs, _sbTris);
+                        AppendPolylineSegment(from, to, halfWidth, dir, SbVerts, SbUvs, SbTris);
                         break;
                 }
             }
 
-            if (_sbVerts.Count == 0) return null; // 全部退化：无有效几何
+            if (SbVerts.Count == 0) return null; // 全部退化：无有效几何
 
             var mesh = new Mesh { name = "NodeLineMesh" };
-            mesh.SetVertices(_sbVerts);
-            mesh.SetUVs(0, _sbUvs);
-            mesh.SetTriangles(_sbTris, 0);
+            mesh.SetVertices(SbVerts);
+            mesh.SetUVs(0, SbUvs);
+            mesh.SetTriangles(SbTris, 0);
             mesh.RecalculateBounds();
             return mesh;
         }
@@ -90,7 +90,7 @@ namespace Ale.NodeTree.Runtime
             List<Vector3> verts, List<Vector2> uvs, List<int> tris)
         {
             var delta = to - from;
-            if (delta.sqrMagnitude < kMinSegLenSq) return; // 退化段跳过，避免零面积三角
+            if (delta.sqrMagnitude < KMinSegLenSq) return; // 退化段跳过，避免零面积三角
             var dir  = delta.normalized;
             var perp = new Vector3(-dir.y, dir.x, 0f) * halfWidth;
 
@@ -118,7 +118,7 @@ namespace Ale.NodeTree.Runtime
             Vector3 from, Vector3 to, float halfWidth, ELayoutDirection dir,
             List<Vector3> verts, List<Vector2> uvs, List<int> tris)
         {
-            if ((to - from).sqrMagnitude < kMinSegLenSq) return; // 退化段跳过
+            if ((to - from).sqrMagnitude < KMinSegLenSq) return; // 退化段跳过
 
             var (cp1, cp2) = GetBezierControlPoints(from, to, dir);
 
@@ -200,14 +200,14 @@ namespace Ale.NodeTree.Runtime
             }
 
             // ── 2. 去除连续重合点（复用 scratch，避免 new[]/new List）──
-            _polyRaw[0] = from; _polyRaw[1] = mid1; _polyRaw[2] = mid2; _polyRaw[3] = to;
-            var path = _polyPath;
+            PolyRaw[0] = from; PolyRaw[1] = mid1; PolyRaw[2] = mid2; PolyRaw[3] = to;
+            var path = PolyPath;
             path.Clear();
             for (int i = 0; i < 4; i++)
             {
-                var pt = _polyRaw[i];
+                var pt = PolyRaw[i];
                 if (path.Count == 0 ||
-                    Vector3.SqrMagnitude(pt - path[path.Count - 1]) > kMinSegLenSq)
+                    Vector3.SqrMagnitude(pt - path[path.Count - 1]) > KMinSegLenSq)
                     path.Add(pt);
             }
             if (path.Count < 2) return;

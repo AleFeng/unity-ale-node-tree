@@ -6,7 +6,7 @@ namespace Ale.NodeTree.Runtime
     /// 节点树条件上下文：实现 Toolkit 的 <see cref="IConditionContext"/>，
     /// 通过 <see cref="GetService{T}"/> 暴露 <see cref="INodeTreeStateSource"/> 供判定器读取节点标签状态。
     ///
-    /// <para><b>本包之外的服务</b>走 <paramref name="fallback"/>：节点的解锁条件常常要问别的系统
+    /// <para><b>本包之外的服务</b>走 fallback：节点的解锁条件常常要问别的系统
     /// （「选了哪个选项」「有没有那件道具」「第几天」），那些判定器取不到自己的数据源时一律
     /// fail-closed 返回 false，表现为条件永不成立且毫无征兆。宿主把自己的
     /// <see cref="IConditionContext"/> 注入进来即可（见

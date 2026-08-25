@@ -2059,7 +2059,7 @@ namespace Ale.NodeTree.Editor
 
         /// <summary>
         /// 框选矩形（画布局部屏幕坐标，已归一化为非负宽高）。
-        /// 纯水平 / 垂直扫选会得到零宽或零高矩形，而 <see cref="Rect.Overlaps"/> 用严格不等式判定、
+        /// 纯水平 / 垂直扫选会得到零宽或零高矩形，而Rect.Overlaps 用严格不等式判定、
         /// 零尺寸恒不相交，故各轴至少补足 1px。
         /// </summary>
         private Rect GetMarqueeScreenRect()
@@ -2180,8 +2180,7 @@ namespace Ale.NodeTree.Editor
             if (parent == null) return;
 
             Undo.RecordObject(_config, "添加子节点");
-
-            var parentType = _config.GetNodeType(parent.nodeTypeRef);
+            
             Vector2 parentSize = GetNodeSize(parent);
 
             Vector2 newPos;
@@ -2338,11 +2337,11 @@ namespace Ale.NodeTree.Editor
             if (count == 0) return;
 
             bool single = count == 1;
-            string title = single ? "删除节点" : "批量删除节点";
+            string opTitle = single ? "删除节点" : "批量删除节点";
             string message = single
                 ? $"删除节点 [{_canvas.SelectedNodeId}]？\n其子节点将提升到父节点下。"
                 : $"删除选中的 {count} 个节点？\n它们的子节点将提升到最近的存活父节点下。";
-            if (!EditorUtility.DisplayDialog(title, message, "删除", "取消")) return;
+            if (!EditorUtility.DisplayDialog(opTitle, message, "删除", "取消")) return;
 
             _pendingDeleteIds.Clear();
             _pendingDeleteIds.AddRange(_canvas.SelectedNodeIds);

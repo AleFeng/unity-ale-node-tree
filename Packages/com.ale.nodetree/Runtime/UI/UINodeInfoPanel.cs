@@ -170,7 +170,7 @@ namespace Ale.NodeTree.Runtime
 
             _fade.Kill();
             _fade = ToolkitTween.FadeCanvasGroup(
-                canvasGroup, 1f, instant ? 0f : fadeInDuration, EToolkitEase.OutQuad);
+                canvasGroup, 1f, instant ? 0f : fadeInDuration);
         }
 
         /// <summary>
