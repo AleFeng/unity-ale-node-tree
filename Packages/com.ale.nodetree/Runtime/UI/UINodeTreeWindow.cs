@@ -566,6 +566,9 @@ namespace Ale.NodeTree.Runtime
             }
 
             var nodeType = config.GetNodeType(nodeData.nodeTypeRef);
+
+            // 先注入回指再绑定：OnBindData 是虚方法，子类可能在其中就要用到窗口
+            nodeUI.OwnerWindow = this;
             nodeUI.OnBindData(nodeData, nodeType);
 
             // anchoredPosition = 节点画布坐标 + 整体偏移量
@@ -593,7 +596,9 @@ namespace Ale.NodeTree.Runtime
             // 节点被视口裁掉，其弹窗不能继续留在屏上
             HideNodeInfoPanel(nodeId);
 
+            // Despawn 会同步触发 OnDespawn → OnUnbindData，其中仍要用 OwnerWindow 收弹窗，故归还后再清
             ToolkitPool.Despawn(nodeUI.gameObject);
+            nodeUI.OwnerWindow = null;
             _activeNodes.Remove(nodeId);
         }
         #endregion

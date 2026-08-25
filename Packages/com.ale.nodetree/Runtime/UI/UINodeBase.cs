@@ -11,7 +11,11 @@ namespace Ale.NodeTree.Runtime
     /// 节点UI基类（MonoBehaviour + IPoolable）。
     /// 通过 ToolkitPool 管理生命周期，子类重写各虚方法实现具体UI逻辑。
     /// 功能：节点图标显示 / 节点名称·描述文本（toolkit AttributeValue.Text，本地化优先+纯文本回退）/
-    ///        鼠标悬停弹窗淡入淡出 + 悬停高亮（均基于 toolkit 中央 Tween）/ 鼠标点击回调。
+    ///        悬停高亮（基于 toolkit 中央 Tween）/ 悬停时请求所属窗口弹出信息弹窗 / 鼠标点击回调。
+    ///
+    /// <para><b>信息弹窗不再由节点自己持有</b>：改由 <see cref="UINodeTreeWindow"/> 用对象池统一管理，
+    /// 放在 ScrollView 之外的专用层里（见 <see cref="UINodeInfoPanel"/>）。本类只负责在悬停时
+    /// 向窗口发起显示 / 隐藏请求。</para>
     /// </summary>
     public class UINodeBase : MonoBehaviour, IPoolable,
         IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
@@ -61,9 +65,8 @@ namespace Ale.NodeTree.Runtime
                     nodeDescText.text = data.nodeDesc != null ? data.nodeDesc.ResolveText() : string.Empty;
             }
             
-            // 重置 信息弹窗与高亮：首次从预制体实例化出来时，二者的视觉状态取自序列化值，
-            // 没有任何其它代码会把它们归零。
-            ResetInfoPanel();
+            // 重置高亮：首次从预制体实例化出来时，它的视觉状态取自序列化值，
+            // 没有任何其它代码会把它归零。
             ResetHighlight();
         }
 
@@ -73,6 +76,9 @@ namespace Ale.NodeTree.Runtime
         /// </summary>
         public virtual void OnUnbindData()
         {
+            // 先收弹窗再清数据：弹窗在窗口侧按 nodeId 索引，顺序反了就取不到 ID、弹窗会留在屏上。
+            HideInfoPanel();
+
             nodeData = null;
             nodeType = null;
 
@@ -83,88 +89,60 @@ namespace Ale.NodeTree.Runtime
             // 复位选中态：节点可能在被选中时 despawn，归还前调用一次还原钩子，避免复用后残留高亮。
             OnNodeDeselected();
 
-            // 重置 信息弹窗与高亮（二者内部各自打断在途补间）。
+            // 重置高亮（内部会打断在途补间）。
             // 补间不随 GameObject 停用而停止，对象池又不做任何视觉复位，故必须在此显式还原。
-            ResetInfoPanel();
             ResetHighlight();
         }
 
         /// <summary>
-        /// 本物体停用时复位弹窗与高亮。
+        /// 本物体停用时收起弹窗并复位高亮。
         /// <para>必要性：面板整体 SetActive(false) 关闭时节点<b>不走</b>对象池归还，且悬停中的节点
         /// 收不到 PointerExit（Unity 不向非激活对象派发），而 toolkit 的补间<b>不随 GameObject 停用而停止</b>
-        /// —— 不复位会让弹窗 / 高亮一路跑到全亮并把守卫位卡住，再次打开面板时常亮且不再响应悬停。</para>
+        /// —— 不复位会让高亮一路跑到全亮，再次打开面板时常亮且不再响应悬停。</para>
         /// <para>子类重写务必调用 <c>base.OnDisable()</c>。声明为 virtual 是因为 Unity 只调用最派生的
         /// 同名方法，子类若自行写 <c>private void OnDisable()</c> 会静默吞掉本实现（有了 virtual 至少会触发 CS0114）。</para>
         /// </summary>
         protected virtual void OnDisable()
         {
-            ResetInfoPanel();
+            HideInfoPanel();
             ResetHighlight();
         }
         #endregion
         
         #region 信息弹窗
-        [Header("鼠标悬停弹窗")]
-        [Tooltip("弹窗根节点的 CanvasGroup，鼠标悬停时淡入，移出时淡出。为 null 时跳过弹窗逻辑。")]
-        [SerializeField] protected CanvasGroup infoPanel;
-        [Tooltip("弹窗淡入动画时长（秒），默认 0.2。")]
-        [SerializeField] protected float fadeInDuration  = 0.2f;
-        [Tooltip("弹窗淡出动画时长（秒），默认 0.3。")]
-        [SerializeField] protected float fadeOutDuration = 0.3f;
-
-        // 悬停弹窗淡入淡出句柄（基于 toolkit 中央 Tween），用于打断上一次动画。
-        private ToolkitTweenHandle _infoPanelFade;
-        // 弹窗 是否已经淡入
-        private bool _isInfoPanelFadeIn;
+        [Header("信息弹窗")]
+        [Tooltip("鼠标悬停时是否请求所属窗口显示信息弹窗。\n" +
+                 "弹窗预制体配在 UINodeTreeWindow 上，由窗口用对象池统一管理、统一定位。")]
+        [SerializeField] protected bool showInfoPanelOnHover = true;
 
         /// <summary>
-        /// 重置 信息弹窗
+        /// 所属节点树窗口。由 <see cref="UINodeTreeWindow"/> 在 Spawn 时注入，归还对象池时清空。
+        /// <para>用注入而非 <c>GetComponentInParent</c>：<c>nodeTreeRoot</c> 允许挂在窗口组件之外
+        /// （ScrollView-Content 用法），向上找并不保证能找到；而 Spawn 时本就要调 OnBindData，顺手赋值零成本。</para>
         /// </summary>
-        private void ResetInfoPanel()
+        public UINodeTreeWindow OwnerWindow { get; internal set; }
+
+        /// <summary>
+        /// 请求所属窗口显示本节点的信息弹窗。
+        /// 子类可重写以附加条件（如未解锁的节点不弹）或完全改用别的表现。
+        /// </summary>
+        protected virtual void ShowInfoPanel()
         {
-            // 先打断在途补间：直接写 alpha 而不 Kill 的话，正在跑的淡入会把它推回去。
-            // 收在方法内部而不是各调用点，是因为本方法有三个调用点（绑定 / 解绑 / 停用）。
-            _infoPanelFade.Kill();
+            if (!showInfoPanelOnHover || nodeData == null || !OwnerWindow) return;
 
-            if (infoPanel)
-            {
-                infoPanel.alpha          = 0f;
-                infoPanel.interactable   = false;
-                infoPanel.blocksRaycasts = false;
-            }
-
-            _isInfoPanelFadeIn = false;
+            OwnerWindow.ShowNodeInfoPanel(nodeData.nodeId);
         }
 
         /// <summary>
-        /// 信息弹窗 淡入
+        /// 请求所属窗口隐藏本节点的信息弹窗。
+        /// <para>刻意<b>不看</b> <see cref="showInfoPanelOnHover"/>：该开关在弹窗已经弹出后才被关掉时，
+        /// 那一个仍然要能收回去。</para>
         /// </summary>
-        private void InfoPanelFadeIn()
+        protected virtual void HideInfoPanel()
         {
-            if (_isInfoPanelFadeIn) return;
-            _isInfoPanelFadeIn = true;
+            if (nodeData == null || !OwnerWindow) return;
 
-            _infoPanelFade.Kill();
-            infoPanel.interactable   = true;
-            infoPanel.blocksRaycasts = true;
-            _infoPanelFade = ToolkitTween.FadeCanvasGroup(
-                infoPanel, 1f, fadeInDuration, EToolkitEase.OutQuad);
-        }
-        
-        /// <summary>
-        /// 信息弹窗 淡出
-        /// </summary>
-        private void InfoPanelFadeOut()
-        {
-            if (!_isInfoPanelFadeIn) return;
-            _isInfoPanelFadeIn = false;
-
-            _infoPanelFade.Kill();
-            infoPanel.interactable   = false;
-            infoPanel.blocksRaycasts = false;
-            _infoPanelFade = ToolkitTween.FadeCanvasGroup(
-                infoPanel, 0f, fadeOutDuration, EToolkitEase.InQuad);
+            OwnerWindow.HideNodeInfoPanel(nodeData.nodeId);
         }
         #endregion
 
@@ -270,28 +248,26 @@ namespace Ale.NodeTree.Runtime
             => OnPointerExitNode();
 
         /// <summary>
-        /// 鼠标悬停开始时调用：弹窗淡入 + 进入高亮态（均带缓动，基于 toolkit 中央 Tween）。
-        /// 子类若只想改高亮表现，重写 <see cref="OnHighlightBegin"/> 即可，无需重写本方法；
-        /// 确需重写本方法时建议调用 base.OnPointerEnterNode() 以保留弹窗与高亮，或完全自定义。
+        /// 鼠标悬停开始时调用：请求窗口弹出信息弹窗 + 进入高亮态。
+        /// 子类若只想改其中一项，重写 <see cref="ShowInfoPanel"/> 或 <see cref="OnHighlightBegin"/> 即可，
+        /// 无需重写本方法；确需重写时建议调用 base.OnPointerEnterNode() 以保留二者，或完全自定义。
         /// </summary>
         public virtual void OnPointerEnterNode()
         {
-            // 弹窗与高亮相互独立：未配置弹窗的节点同样应当获得高亮，故不在此提前 return
-            if (infoPanel) InfoPanelFadeIn();
-
+            // 弹窗与高亮相互独立，各自守卫各自的前提
+            ShowInfoPanel();
             SetHighlight(true);
         }
 
         /// <summary>
-        /// 鼠标悬停结束时调用：弹窗淡出 + 退出高亮态（均带缓动，基于 toolkit 中央 Tween）。
-        /// 子类若只想改高亮表现，重写 <see cref="OnHighlightEnd"/> 即可，无需重写本方法；
-        /// 确需重写本方法时建议调用 base.OnPointerExitNode() 以保留弹窗与高亮，或完全自定义。
+        /// 鼠标悬停结束时调用：请求窗口收起信息弹窗 + 退出高亮态。
+        /// 子类若只想改其中一项，重写 <see cref="HideInfoPanel"/> 或 <see cref="OnHighlightEnd"/> 即可，
+        /// 无需重写本方法；确需重写时建议调用 base.OnPointerExitNode() 以保留二者，或完全自定义。
         /// </summary>
         public virtual void OnPointerExitNode()
         {
-            // 与 OnPointerEnterNode 对称：不因未配置弹窗而跳过高亮
-            if (infoPanel) InfoPanelFadeOut();
-
+            // 与 OnPointerEnterNode 对称
+            HideInfoPanel();
             SetHighlight(false);
         }
 
