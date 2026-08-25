@@ -179,7 +179,7 @@ The runtime node-tree UI window (a standalone `MonoBehaviour`). Attach it to a U
 - **Pools node UI per node type** (via `ToolkitGameObjectPool` from `com.ale.toolkit`) and **Spawns / Despawns on demand through viewport culling**;
 - **Merges a line mesh per node type** (fewer draw calls); UVs pair with `NodeTree/NodeLineFlow` for the flow effect;
 - Rebuilds lines on demand in `LateUpdate` via a dirty flag;
-- **Owns the info popups** (since 1.6.0): `infoPanelPrefab` names the popup prefab; the window creates an `InfoPanelLayer` under itself (outside the ScrollView, last sibling) plus a pool, positions popups at their node on hover and keeps them following while the tree scrolls or zooms. See [`UINodeInfoPanel`](#uinodeinfopanel).
+- **Owns the info popups** (since 1.6.0): `infoPanelPrefab` names the popup prefab; the window creates an `InfoPanelLayer` under itself (outside the ScrollView, last sibling) plus a pool, positions popups at **the node centre plus `infoPanelOffset`** (default `(0, 120)`, i.e. above the node) on hover and keeps them following while the tree scrolls or zooms. See [`UINodeInfoPanel`](#uinodeinfopanel).
 - When `refreshStatesOnInit` is on, `InitTree` calls `RefreshAllNodeStates` so auto tags (e.g. `Unlock`) resolve on open.
 - `forceUnlockForTest` + `forceUnlockTags` (debug; since 1.5.2, formerly `unlockAllForTest`): with the toggle on, `InitTree` stamps the tags listed in `forceUnlockTags` onto every node, bypassing unlock conditions and save state so you can inspect the whole tree. **Leave the list empty to stamp every tag in the vocabulary** (`NodeTreeData.tags`) — that default works with zero configuration and cannot go silently ineffective when a host renames its tags, since the host decides what "enterable" means and stamping only `Unlock` does nothing for a host keying off its own tag. Fill the list in when you want to narrow it down. Tags go into the in-memory state only, never into the save file; keep it off for release builds.
 
@@ -227,10 +227,9 @@ The info-popup component (`MonoBehaviour` + `IPoolable`, since 1.6.0). Attach it
 |-------|---------|-------------|
 | `canvasGroup` | — | The `CanvasGroup` driven by the fade; auto-resolved from this GameObject when left empty. |
 | `fadeInDuration` / `fadeOutDuration` | 0.2 / 0.3 | Fade in / out duration (seconds). |
-| `offsetFromNode` | (0, 120) | Offset from the **node centre** (node-tree container units, Y up). |
 | `nodeNameText` / `nodeDescText` / `iconImage` | — | **Optional** wiring: filled from `NodeData.nodeName.ResolveText()` / `nodeDesc.ResolveText()` / `uiIcon` on bind; skipped when left empty (the demo popup's text is driven by Unity Localization, so all three stay empty). |
 
-**Main API**: `Bind(NodeData, NodeTypeData)` / `Unbind()` (`virtual`; overrides must call `base`), `Show(bool instant = false)` / `Hide(bool instant = false)` (**non-virtual**), `GetOffset(NodeData, NodeTypeData)` (`virtual`, so offsets can vary per node type / size), and the read-only `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`.
+**Main API**: `Bind(NodeData, NodeTypeData)` / `Unbind()` (`virtual`; overrides must call `base`), `Show(bool instant = false)` / `Hide(bool instant = false)` (**non-virtual**), and the read-only `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`.
 
 **Overridable hooks**: `OnShowBegin(bool instant)` / `OnHideBegin(bool instant)` (`protected virtual`) — the base implementation tweens `canvasGroup`'s alpha to 1 / 0; override for a scale-in, a slide, a sweep, or anything else. The `instant` caveats are the same as for `UINodeBase`'s highlight hooks.
 
@@ -241,6 +240,7 @@ The info-popup component (`MonoBehaviour` + `IPoolable`, since 1.6.0). Attach it
 - Set the root `RectTransform`'s anchors to **(0.5, 0.5)** — paired with the layer's centred `pivot`, the window can position it by writing `localPosition` alone.
 - **Do not enable `blocksRaycasts`** — the component force-clears it in `Awake`. The popup and the node live in separate subtrees, so the moment the popup covers the cursor you get `PointerExit` → hide → cursor back on the node → `PointerEnter` → show: a visible flicker loop.
 - The window creates the layer under its own `RectTransform` (last sibling). It **must sit outside the ScrollView's `Viewport`**, otherwise the `Mask` clips it and you are back to "covered by another node". Use `infoPanelLayer` to point somewhere else.
+- **The offset lives on the window**: a popup lands at the node centre plus `UINodeTreeWindow.infoPanelOffset` (default `(0, 120)`, i.e. above the node). `NodeData.position` already *is* the node centre, so no size-based adjustment is needed.
 - Popups **do not scale with the canvas**: the offset is applied in layer space, so zooming the node-tree canvas leaves popup size and offset untouched. This is deliberate — a popup is meant to be read, not shrunk out of legibility.
 
 **Showing several at once**: popups are keyed by `nodeId`, so you can `ShowNodeInfoPanel` several nodes at the same time. `Hide` only starts the fade-out and does not return the instance to the pool immediately; the window polls `IsRecyclable` in `LateUpdate` and recycles then — so re-hovering mid-fade reuses the same instance and fades it back in without a flicker.

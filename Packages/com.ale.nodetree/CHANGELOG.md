@@ -22,8 +22,8 @@
 
 ### 新增
 
-- **`UINodeInfoPanel`**（`MonoBehaviour` + `IPoolable`）：独立的信息弹窗组件，职责只有三件 —— 持有内容接线、淡入淡出、汇报自己能否被回收。序列化字段 `canvasGroup` / `fadeInDuration` / `fadeOutDuration` / `offsetFromNode`（相对**节点中心**的偏移，默认 `(0, 120)`）与三个**可选**的内容接线 `nodeNameText` / `nodeDescText` / `iconImage`（不接线即跳过）。`Bind` / `Unbind` / `GetOffset` 为 `virtual`；`Show(bool)` / `Hide(bool)` **非虚**，表现交给 `OnShowBegin(bool)` / `OnHideBegin(bool)` 两个 `protected virtual` 钩子 —— `IsVisible` 是窗口回收弹窗的唯一依据，子类漏调 `base` 会让弹窗永不回收（对象池泄漏），故用非虚入口挡住。
-- **`UINodeTreeWindow` 统一管理弹窗**：新增序列化字段 `infoPanelPrefab`（留空则整套弹窗功能静默关闭）/ `infoPanelLayer`（留空则自动创建）/ `infoPanelPreload`，以及三个公开方法 `ShowNodeInfoPanel(string)` / `HideNodeInfoPanel(string)` / `HideAllNodeInfoPanels(bool)`。弹窗按 `nodeId` 索引，**支持同时显示多个**；悬停时按节点位置定位，并在 `LateUpdate` 里跟随滚动 / 缩放。
+- **`UINodeInfoPanel`**（`MonoBehaviour` + `IPoolable`）：独立的信息弹窗组件，职责只有三件 —— 持有内容接线、淡入淡出、汇报自己能否被回收。序列化字段 `canvasGroup` / `fadeInDuration` / `fadeOutDuration` 与三个**可选**的内容接线 `nodeNameText` / `nodeDescText` / `iconImage`（不接线即跳过）。`Bind` / `Unbind` 为 `virtual`；`Show(bool)` / `Hide(bool)` **非虚**，表现交给 `OnShowBegin(bool)` / `OnHideBegin(bool)` 两个 `protected virtual` 钩子 —— `IsVisible` 是窗口回收弹窗的唯一依据，子类漏调 `base` 会让弹窗永不回收（对象池泄漏），故用非虚入口挡住。
+- **`UINodeTreeWindow` 统一管理弹窗**：新增序列化字段 `infoPanelPrefab`（留空则整套弹窗功能静默关闭）/ `infoPanelOffset`（弹窗相对**节点中心**的偏移，默认 `(0, 120)` 即节点上方）/ `infoPanelLayer`（留空则自动创建）/ `infoPanelPreload`，以及三个公开方法 `ShowNodeInfoPanel(string)` / `HideNodeInfoPanel(string)` / `HideAllNodeInfoPanels(bool)`。弹窗按 `nodeId` 索引，**支持同时显示多个**；悬停时按节点位置定位，并在 `LateUpdate` 里跟随滚动 / 缩放。
 - **`UINodeBase.OwnerWindow`**（`public get` / `internal set`，由窗口在 Spawn 时注入）与序列化开关 `showInfoPanelOnHover`（默认 `true`），以及 `ShowInfoPanel()` / `HideInfoPanel()` 两个 `protected virtual` 转调方法 —— 子类可重写以附加条件（如未解锁的节点不弹）。
 - **Demo 新增 `UINodeInfoPanel.prefab`**：由原 `UINodeNomal` 的 `InfoPanel` 子树抽出（两个节点预制体的弹窗在 sprite、颜色、PPU 与本地化 key 上完全一致，合并为一份无损失），两个节点预制体的 `InfoPanel` 子物体已移除，窗口预制体已接线。`Assets/Demo` 与 `Samples~/Demo` 两份拷贝已同步。
 
@@ -31,6 +31,7 @@
 
 - **弹窗层放在 ScrollView 之外**：窗口在自己的 `RectTransform` 下自动创建 `InfoPanelLayer`（最后一个兄弟、铺满、`pivot` 居中、整层 `blocksRaycasts = false`），因此弹窗**压在所有节点之上**且**不再被 `Viewport` 的 `Mask` 裁剪**。本组件不在 `RectTransform` 上时会告警并回落 `nodeTreeRoot`，此时请手动指定 `infoPanelLayer`。
 - **弹窗恒不阻挡射线**（`UINodeInfoPanel.Awake` 强制 `blocksRaycasts = false`）。旧实现在淡入时置 `true` 是安全的 —— 弹窗是节点的子物体，uGUI 沿层级向公共祖先派发，指针落在弹窗上不会触发节点的 `PointerExit`。拆出去之后二者分属两棵子树，一旦挡住光标就会 `PointerExit` → 隐藏 → 光标回到节点 → `PointerEnter` → 显示，形成肉眼可见的闪烁死循环。
+- **弹窗位置 = 节点中心 + `infoPanelOffset`**：`NodeData.position` 本就是节点中心，无需再按节点尺寸折算；偏移配在**窗口**上而非弹窗预制体上，一处改全树生效。
 - **弹窗不随画布缩放**：偏移施加在弹窗层空间，缩放节点树画布时弹窗的尺寸与偏移保持不变。这是有意为之 —— 弹窗是给人读的，不该跟着缩到看不清。
 - **回收走轮询而非补间回调**：`Hide()` 只开始淡出、不立即归还池，窗口在 `LateUpdate` 里轮询 `IsRecyclable` 才回收。好处是淡出途中重新悬停能复用同一实例淡回去、不闪；也避免了「完成回调在时长 ≤ 0 与 `Kill(true)` 两条路径上同步触发」导致的遍历中途改集合。
 - **既有节点预制体无需迁移**（除上述三步）：新增的 `showInfoPanelOnHover` 是纯增量字段，资产 YAML 缺该键时 Unity 反序列化保留 C# 初始值 `true`。
@@ -39,8 +40,8 @@
 
 - `UINodeBase` **移除**：`protected CanvasGroup infoPanel`、`protected float fadeInDuration`、`protected float fadeOutDuration`。
 - `UINodeBase` **新增**：`public UINodeTreeWindow OwnerWindow { get; internal set; }`、`protected bool showInfoPanelOnHover`、`protected virtual void ShowInfoPanel()`、`protected virtual void HideInfoPanel()`。
-- `UINodeTreeWindow` **新增**：`public UINodeInfoPanel ShowNodeInfoPanel(string nodeId)`、`public void HideNodeInfoPanel(string nodeId)`、`public void HideAllNodeInfoPanels(bool instant = false)`；序列化字段 `infoPanelPrefab` / `infoPanelLayer` / `infoPanelPreload`。
-- **新类** `UINodeInfoPanel`：`public virtual void Bind(NodeData, NodeTypeData)`、`public virtual void Unbind()`、`public void Show(bool instant = false)`、`public void Hide(bool instant = false)`、`public virtual Vector2 GetOffset(NodeData, NodeTypeData)`、`protected virtual void OnShowBegin(bool)`、`protected virtual void OnHideBegin(bool)`、`protected virtual void OnDisable()`、只读属性 `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`。
+- `UINodeTreeWindow` **新增**：`public UINodeInfoPanel ShowNodeInfoPanel(string nodeId)`、`public void HideNodeInfoPanel(string nodeId)`、`public void HideAllNodeInfoPanels(bool instant = false)`；序列化字段 `infoPanelPrefab` / `infoPanelOffset` / `infoPanelLayer` / `infoPanelPreload`。
+- **新类** `UINodeInfoPanel`：`public virtual void Bind(NodeData, NodeTypeData)`、`public virtual void Unbind()`、`public void Show(bool instant = false)`、`public void Hide(bool instant = false)`、`protected virtual void OnShowBegin(bool)`、`protected virtual void OnHideBegin(bool)`、`protected virtual void OnDisable()`、只读属性 `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`。
 
 ## [1.5.2] - 2026-08-24
 

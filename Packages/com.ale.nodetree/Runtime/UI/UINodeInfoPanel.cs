@@ -10,8 +10,8 @@ namespace Ale.NodeTree.Runtime
     /// 由 <see cref="UINodeTreeWindow"/> 通过对象池统一取用、定位与回收 —— 节点自身不再持有弹窗。
     ///
     /// <para><b>职责只有三件</b>：持有内容接线、淡入淡出、汇报自己能否被回收
-    /// （<see cref="IsRecyclable"/>）。<b>定位不在本类</b>：弹窗要摆在哪由窗口决定，
-    /// 只有窗口知道节点在画布上的坐标；本类只通过 <see cref="GetOffset"/> 提供一个相对偏移。</para>
+    /// （<see cref="IsRecyclable"/>）。<b>定位完全不在本类</b>：弹窗摆在哪由窗口决定 ——
+    /// 只有窗口知道节点在画布上的坐标，偏移量也配在窗口的 <c>infoPanelOffset</c> 上。</para>
     ///
     /// <para><b>为什么弹窗要从节点里搬出来</b>：作为节点的子物体时，弹窗的渲染顺序跟着节点在
     /// NodeContainer 里的兄弟顺序走，而节点是按视口裁剪动态 Spawn 的、顺序不可控 ——
@@ -28,11 +28,6 @@ namespace Ale.NodeTree.Runtime
         [SerializeField] protected float fadeInDuration  = 0.2f;
         [Tooltip("弹窗淡出时长（秒），默认 0.3。")]
         [SerializeField] protected float fadeOutDuration = 0.3f;
-
-        [Header("定位")]
-        [Tooltip("弹窗相对【节点中心】的偏移（节点树容器单位，Y 轴向上）。\n" +
-                 "默认 (0, 120)：节点默认尺寸 100×100，即悬于节点上边缘之上 70。")]
-        [SerializeField] protected Vector2 offsetFromNode = new Vector2(0f, 120f);
 
         [Header("内容（可选接线）")]
         [Tooltip("节点名称文本，绑定时用 NodeData.nodeName.ResolveText() 填充；不接线则跳过。")]
@@ -134,15 +129,6 @@ namespace Ale.NodeTree.Runtime
             BoundNode = null;
             BoundType = null;
         }
-        #endregion
-
-        #region 定位
-        /// <summary>
-        /// 弹窗相对<b>节点中心</b>的偏移（节点树容器单位）。由窗口在定位时调用。
-        /// <para>基类返回序列化的 <see cref="offsetFromNode"/>；子类可重写以按节点类型 / 尺寸区别对待，
-        /// 例如 <c>new Vector2(0f, type.resolution.y * 0.5f + 70f)</c> 让偏移随节点高度自适应。</para>
-        /// </summary>
-        public virtual Vector2 GetOffset(NodeData node, NodeTypeData type) => offsetFromNode;
         #endregion
 
         #region 显示与隐藏

@@ -728,6 +728,7 @@ MonoBehaviour:
   forceUnlockForTest: 0
   forceUnlockTags: []
   infoPanelPrefab: {fileID: 3733685018742849909, guid: dd6d1027002a90e498235d84823dd915, type: 3}
+  infoPanelOffset: {x: 0, y: 120}
   infoPanelLayer: {fileID: 0}
   infoPanelPreload: 2
   uiCamera: {fileID: 0}

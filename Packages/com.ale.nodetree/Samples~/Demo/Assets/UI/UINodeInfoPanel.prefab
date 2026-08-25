@@ -206,7 +206,6 @@ MonoBehaviour:
   canvasGroup: {fileID: 7381811612630761803}
   fadeInDuration: 0.2
   fadeOutDuration: 0.3
-  offsetFromNode: {x: 0, y: 120}
   nodeNameText: {fileID: 0}
   nodeDescText: {fileID: 0}
   iconImage: {fileID: 0}

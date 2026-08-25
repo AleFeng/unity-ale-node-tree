@@ -176,7 +176,7 @@ save.Load(json);
 - **按节点类型维护对象池**（基于 `com.ale.toolkit` 的 `ToolkitGameObjectPool`），通过**视口裁剪按需 Spawn / Despawn** 节点 UI；
 - **为每种节点类型合并生成连线 Mesh**（减少 DrawCall），UV 配合 `NodeTree/NodeLineFlow` 做流光；
 - 在 `LateUpdate` 中按脏标记按需重建连线；
-- **统一管理信息弹窗**（1.6.0 起）：`infoPanelPrefab` 指定弹窗预制体，窗口自动在自己下面建 `InfoPanelLayer`（ScrollView 之外、最后一个兄弟）与对象池；悬停时按节点位置定位，并随滚动 / 缩放跟随。详见 [`UINodeInfoPanel`](#uinodeinfopanel)。
+- **统一管理信息弹窗**（1.6.0 起）：`infoPanelPrefab` 指定弹窗预制体，窗口自动在自己下面建 `InfoPanelLayer`（ScrollView 之外、最后一个兄弟）与对象池；悬停时定位到**节点中心 + `infoPanelOffset`**（默认 `(0, 120)`，即节点上方），并随滚动 / 缩放跟随。详见 [`UINodeInfoPanel`](#uinodeinfopanel)。
 - `refreshStatesOnInit`：勾选后在 `InitTree` 时自动调用 `RefreshAllNodeStates`（按存档与条件刷新所有自动标签）。
 - `forceUnlockForTest` + `forceUnlockTags`【测试用】（1.5.2 起，原 `unlockAllForTest`）：勾选开关后，`InitTree` 给每个节点挂上 `forceUnlockTags` 里的标签，绕过解锁条件与存档状态，便于查看整棵树的完整结构。**列表留空则挂上词表（`NodeTreeData.tags`）里的全部标签**——零配置即生效，宿主改了标签名也不会让开关静默失效（节点能不能进由宿主说了算，只挂 `Unlock` 对用自定义标签判定的宿主毫无作用）。需要收窄时再逐条填写。只往内存态里加标签，不改存档文件；发布前应保持关闭。
 
@@ -224,10 +224,9 @@ protected override void OnHighlightBegin(bool instant)
 |------|------|------|
 | `canvasGroup` | — | 控制淡入淡出的 `CanvasGroup`；为空时自动取本物体上的。 |
 | `fadeInDuration` / `fadeOutDuration` | 0.2 / 0.3 | 淡入 / 淡出时长（秒）。 |
-| `offsetFromNode` | (0, 120) | 弹窗相对**节点中心**的偏移（节点树容器单位，Y 轴向上）。 |
 | `nodeNameText` / `nodeDescText` / `iconImage` | — | **可选**接线：绑定时分别用 `NodeData.nodeName.ResolveText()` / `nodeDesc.ResolveText()` / `uiIcon` 填充；不接线即跳过（Demo 的弹窗文本由 Unity Localization 驱动，三个都不接）。 |
 
-**主要 API**：`Bind(NodeData, NodeTypeData)` / `Unbind()`（`virtual`，重写务必调 `base`）、`Show(bool instant = false)` / `Hide(bool instant = false)`（**非虚**）、`GetOffset(NodeData, NodeTypeData)`（`virtual`，可按节点类型 / 尺寸返回不同偏移）、只读属性 `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`。
+**主要 API**：`Bind(NodeData, NodeTypeData)` / `Unbind()`（`virtual`，重写务必调 `base`）、`Show(bool instant = false)` / `Hide(bool instant = false)`（**非虚**）、只读属性 `BoundNode` / `BoundType` / `Rect` / `IsVisible` / `IsRecyclable`。
 
 **可重写钩子**：`OnShowBegin(bool instant)` / `OnHideBegin(bool instant)`（`protected virtual`）—— 基类实现是把 `canvasGroup` 的 alpha 补间到 1 / 0；子类可重写以实现缩放弹出、位移、描边扫光等自定义出现效果。`instant` 的注意事项同 `UINodeBase` 的高亮钩子。
 
@@ -238,6 +237,7 @@ protected override void OnHighlightBegin(bool instant)
 - 根 `RectTransform` 的 anchor 取 **(0.5, 0.5)**（与弹窗层的 `pivot` 居中配合，窗口写 `localPosition` 即可定位）。
 - **不必也不要开 `blocksRaycasts`**：组件在 `Awake` 里会强制关掉它。弹窗与节点分属两棵子树，一旦挡住光标就会 `PointerExit` → 隐藏 → 光标回到节点 → `PointerEnter` → 显示，形成肉眼可见的闪烁死循环。
 - 弹窗层由窗口自动创建在其 `RectTransform` 下（最后一个兄弟），**必须在 ScrollView 的 `Viewport` 之外** —— 否则会被其 `Mask` 裁剪，且回到「被别的节点盖住」的老问题。需要放在别处时用 `infoPanelLayer` 指定。
+- **位置配在窗口上**：弹窗落点 = 节点中心 + `UINodeTreeWindow.infoPanelOffset`（默认 `(0, 120)`，即节点上方）。`NodeData.position` 本就是节点中心，无需按节点尺寸折算。
 - 弹窗**不随画布缩放**：偏移施加在弹窗层空间，缩放节点树画布时弹窗的尺寸与偏移保持不变。这是有意为之 —— 弹窗是给人读的，不该跟着缩到看不清。
 
 **同时显示多个**：弹窗按 `nodeId` 索引，可对多个节点同时 `ShowNodeInfoPanel`。`Hide` 只是开始淡出、不立即归还池，窗口在 `LateUpdate` 里轮询 `IsRecyclable` 才回收 —— 因此淡出途中重新悬停会复用同一实例淡回去，不会闪。

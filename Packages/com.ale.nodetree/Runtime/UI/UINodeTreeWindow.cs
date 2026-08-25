@@ -609,6 +609,11 @@ namespace Ale.NodeTree.Runtime
                  "弹窗由本窗口统一用对象池管理，不再由每个节点预制体各挂一份。")]
         [SerializeField] private UINodeInfoPanel infoPanelPrefab;
 
+        [Tooltip("弹窗相对【节点中心】的偏移（节点树容器单位，Y 轴向上）。\n" +
+                 "默认 (0, 120)：节点默认尺寸 100×100，即悬于节点上边缘之上 70，弹窗在节点上方。\n" +
+                 "偏移施加在弹窗层空间，故缩放节点树画布时它保持不变。")]
+        [SerializeField] private Vector2 infoPanelOffset = new Vector2(0f, 120f);
+
         [Tooltip("弹窗所在的层。留空则在本窗口下自动创建 InfoPanelLayer（最后一个兄弟，压在 ScrollView 之上）。\n" +
                  "手动指定时务必选在 ScrollView 的 Viewport 之外，否则弹窗会被其 Mask 裁剪。")]
         [SerializeField] private RectTransform infoPanelLayer;
@@ -811,13 +816,14 @@ namespace Ale.NodeTree.Runtime
         }
 
         /// <summary>
-        /// 把弹窗摆到其绑定节点的位置（外加 <see cref="UINodeInfoPanel.GetOffset"/> 的偏移）。
+        /// 把弹窗摆到其绑定节点的<b>中心</b>再加上 <see cref="infoPanelOffset"/>。
         ///
         /// <para>换算走「节点容器局部 → 世界 → 弹窗层局部」：两个 Transform 同处一个 Canvas，
         /// 因此<b>无需相机、无需屏幕坐标往返</b>，对 Overlay / Camera / World 三种 RenderMode 一律成立。</para>
         ///
         /// <para>偏移施加在<b>弹窗层</b>空间而非节点容器空间，故缩放画布（<c>localScale</c>）时
         /// 弹窗自身尺寸与偏移保持不变 —— 这是有意为之：弹窗是给人读的，不该跟着缩小到看不清。</para>
+        /// <para>节点坐标（<c>NodeData.position</c>）本身就是节点<b>中心</b>，故无需再按节点尺寸折算。</para>
         /// </summary>
         private void PositionInfoPanel(UINodeInfoPanel panel)
         {
@@ -831,9 +837,8 @@ namespace Ale.NodeTree.Runtime
             Vector3 world      = _nodeContainer.TransformPoint(local);
             Vector3 layerLocal = _infoPanelLayer.InverseTransformPoint(world);
 
-            Vector2 offset = panel.GetOffset(node, panel.BoundType);
-            panel.Rect.localPosition = new Vector3(layerLocal.x + offset.x,
-                                                   layerLocal.y + offset.y, 0f);
+            panel.Rect.localPosition = new Vector3(layerLocal.x + infoPanelOffset.x,
+                                                   layerLocal.y + infoPanelOffset.y, 0f);
         }
 
         /// <summary>在激活弹窗中按节点 ID 查找；没有则返回 null。数量极少，顺序查找即可。</summary>
