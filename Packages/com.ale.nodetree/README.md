@@ -177,7 +177,7 @@ save.Load(json);
 - **为每种节点类型合并生成连线 Mesh**（减少 DrawCall），UV 配合 `NodeTree/NodeLineFlow` 做流光；
 - 在 `LateUpdate` 中按脏标记按需重建连线；
 - **统一管理信息弹窗**（1.6.0 起）：`infoPanelPrefab` 指定弹窗预制体，窗口自动在自己下面建 `InfoPanelLayer`（ScrollView 之外、最后一个兄弟）与对象池；悬停时定位到**节点中心 + `infoPanelOffset`**（默认 `(0, 120)`，即节点上方），并随滚动 / 缩放跟随。详见 [`UINodeInfoPanel`](#uinodeinfopanel)。
-- **运行时缩放**（1.7.0 起）：滚轮**以光标为锚点**、滑条以视口中心为锚点，缩的是 `nodeTreeRoot` 的 `localScale`。范围 `minZoom`~`maxZoom`（默认 `0.1`~`3`）、默认倍率 `defaultZoom`（`1`）、滚轮每格乘 `zoomStepPerScroll`（`1.15`，全程约 24 格）。接一根 `zoomSlider` 即可拖动缩放（窗口会强制它走归一化 `0~1` 取值，与倍率之间是**对数映射**，默认范围下 1.0x 落在 68% 处），再接一个 `zoomValueText` 就能按 `zoomValueFormat`（`"{0:0.0}x"`）显示当前倍率。滚轮输入区由窗口自动装配，见 [`UINodeTreeZoomArea`](#uinodetreezoomarea)。
+- **运行时缩放**（1.7.0 起）：滚轮**以光标为锚点**、滑条以视口中心为锚点，缩的是 `nodeTreeRoot` 的 `localScale`。范围 `minZoom`~`maxZoom`（默认 `0.1`~`3`）、默认倍率 `defaultZoom`（`1`）、滚轮每格加减 `zoomStepPerScroll`（`0.1`，全程约 29 格）。接一根 `zoomSlider` 即可拖动缩放（窗口会强制它走归一化 `0~1` 取值，与倍率之间是**对数映射**，默认范围下 1.0x 落在 68% 处），再接一个 `zoomValueText` 就能按 `zoomValueFormat`（`"{0:0.0}x"`）显示当前倍率。滚轮输入区由窗口自动装配，见 [`UINodeTreeZoomArea`](#uinodetreezoomarea)。
 - `refreshStatesOnInit`：勾选后在 `InitTree` 时自动调用 `RefreshAllNodeStates`（按存档与条件刷新所有自动标签）。
 - `forceUnlockForTest` + `forceUnlockTags`【测试用】（1.5.2 起，原 `unlockAllForTest`）：勾选开关后，`InitTree` 给每个节点挂上 `forceUnlockTags` 里的标签，绕过解锁条件与存档状态，便于查看整棵树的完整结构。**列表留空则挂上词表（`NodeTreeData.tags`）里的全部标签**——零配置即生效，宿主改了标签名也不会让开关静默失效（节点能不能进由宿主说了算，只挂 `Unlock` 对用自定义标签判定的宿主毫无作用）。需要收窄时再逐条填写。只往内存态里加标签，不改存档文件；发布前应保持关闭。
 

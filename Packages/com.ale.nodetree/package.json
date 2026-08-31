@@ -1,6 +1,6 @@
 {
   "name": "com.ale.nodetree",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "displayName": "Ale Node Tree",
   "description": "可视化节点树/技能树/科技树编辑与运行时展示插件：条件解锁、对象池化 UI、URP 流光连线。",
   "unity": "2022.3",

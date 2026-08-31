@@ -393,7 +393,7 @@ MonoBehaviour:
   m_text: 1.0x
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 9d2ec58c21fc1f448bdaa2561bea343f, type: 2}
-  m_sharedMaterial: {fileID: 0}
+  m_sharedMaterial: {fileID: 629922519631163190, guid: 9d2ec58c21fc1f448bdaa2561bea343f, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -1150,7 +1150,7 @@ MonoBehaviour:
   minZoom: 0.1
   maxZoom: 3
   defaultZoom: 1
-  zoomStepPerScroll: 1.15
+  zoomStepPerScroll: 0.1
   zoomInputArea: {fileID: 0}
   zoomSlider: {fileID: 2657036360973192934}
   zoomValueText: {fileID: 1618850666346506384}

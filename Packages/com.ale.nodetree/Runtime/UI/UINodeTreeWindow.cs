@@ -1061,10 +1061,10 @@ namespace Ale.NodeTree.Runtime
         [Tooltip("默认缩放倍率。resetZoomOnInit 打开时，每次 InitTree 都回到这个值。")]
         [SerializeField] private float defaultZoom = 1f;
 
-        [Tooltip("每格滚轮的缩放倍数（乘性）。1.15 = 每格放大 15%，走完 0.1x~3.0x 全程约 24 格。\n" +
-                 "乘性步进配对数滑条，滚轮每格在滑条上移动的距离才是等距的，\n" +
-                 "缩放手感在任何倍率下也才一致（0.2x 时不会一格就跳一大截）。")]
-        [SerializeField] private float zoomStepPerScroll = 1.15f;
+        [Tooltip("每格滚轮增减的倍率值（加性）。0.1 = 每格加减 0.1x，走完 0.1x~3.0x 全程约 29 格。\n" +
+                 "加性的好处是配置直观：填多少就是每格加减多少。\n" +
+                 "代价是各倍率下的手感不一致 —— 同样一格，在 0.1x 处是翻倍，在 3.0x 处只有 3%。")]
+        [SerializeField] private float zoomStepPerScroll = 0.1f;
 
         [Tooltip("滚轮输入区。留空则自动取 nodeTreeRoot 所属 ScrollRect 的 Viewport，再回落 nodeTreeRoot 的父级。\n" +
                  "⚠ 它必须是「射线能命中的东西」的祖先、且位于 ScrollRect 之下，否则滚轮会被 ScrollRect 抢走，\n" +
@@ -1116,8 +1116,9 @@ namespace Ale.NodeTree.Runtime
 
         /// <summary>
         /// 滚轮缩放。由 <see cref="UINodeTreeZoomArea"/> 转调，宿主不必自己接线。
-        /// 步进是<b>乘性</b>的：<c>zoom *= zoomStepPerScroll ^ scrollDelta.y</c>，
-        /// 用 <c>Pow</c> 而非乘一个固定系数，是为了让触控板那种小数增量也能平滑生效。
+        /// 步进是<b>加性</b>的：<c>zoom += zoomStepPerScroll * scrollDelta.y</c> ——
+        /// 配置直观，填多少就是每格加减多少。乘上 <c>scrollDelta.y</c> 而不是固定加减一次，
+        /// 是为了让触控板那种小数增量也能按比例生效。
         /// </summary>
         internal void ZoomByScroll(PointerEventData eventData)
         {
@@ -1126,7 +1127,7 @@ namespace Ale.NodeTree.Runtime
             float delta = eventData.scrollDelta.y;
             if (Mathf.Approximately(delta, 0f)) return;
 
-            ApplyZoom(_zoom * Mathf.Pow(zoomStepPerScroll, delta),
+            ApplyZoom(_zoom + zoomStepPerScroll * delta,
                       ScreenPointToTreeWorld(eventData.position));
         }
 
@@ -1342,7 +1343,7 @@ namespace Ale.NodeTree.Runtime
             minZoom           = Mathf.Max(0.01f, minZoom);
             maxZoom           = Mathf.Max(minZoom * 1.01f, maxZoom);
             defaultZoom       = Mathf.Clamp(defaultZoom, minZoom, maxZoom);
-            zoomStepPerScroll = Mathf.Max(1.001f, zoomStepPerScroll);
+            zoomStepPerScroll = Mathf.Max(0.001f, zoomStepPerScroll);
         }
         #endregion
         

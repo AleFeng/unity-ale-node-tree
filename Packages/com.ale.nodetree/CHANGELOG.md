@@ -6,6 +6,26 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.7.1] - 2026-08-31
+
+滚轮步进由**乘性**改为**加性**：`zoomStepPerScroll` 现在就是「每格加减多少倍率」，填多少就是多少。
+
+### 变更
+
+- **`UINodeTreeWindow.zoomStepPerScroll` 语义变更**（该字段 1.7.0 才引入，只存在了一个版本）：由
+  `zoom *= zoomStepPerScroll ^ scrollDelta.y` 改为 `zoom += zoomStepPerScroll * scrollDelta.y`，
+  **默认值 `1.15` → `0.1`**（走完 0.1x~3.0x 全程约 29 格）。仍然乘上 `scrollDelta.y` 而不是固定加减一次，
+  触控板那种小数增量照样按比例生效。
+
+  ⚠ **在 1.7.0 上配过这个字段的资产需要手工改**：旧值是倍数（如 `1.15` = 每格 +15%），在新语义下会被当成
+  「每格加减 1.15x」，一格就冲到范围端点。**没有自动迁移** —— `1.15` 在新语义下同样是个合法值，
+  无从分辨它是旧配置还是有意填的。本仓库 Demo 的 `UIStoryTreeWindow.prefab` 已改为 `0.1`。
+
+  代价是**各倍率下的手感不再一致**：同样一格，在 0.1x 处是翻倍，在 3.0x 处只有 3%；在对数滑条上，
+  每格滚轮走的距离也不再等距（左端大、右端小）。这是为配置直观性作出的自觉取舍。
+
+- `OnValidate` 对 `zoomStepPerScroll` 的下限由 `1.001` 改为 `0.001`（加性步进只要求为正）。
+
 ## [1.7.0] - 2026-08-31
 
 运行时节点树现在可以缩放：滚轮以光标为锚点，另可接一条滑条直接拖。既有工程**零迁移** —— 新增字段全是增量，资产 YAML 缺这些键时 Unity 反序列化保留 C# 初值；不接滑条就只有滚轮，`zoomEnabled` 关掉则完全恢复旧行为。
