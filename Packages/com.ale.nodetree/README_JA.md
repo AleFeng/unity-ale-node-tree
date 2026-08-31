@@ -7,7 +7,7 @@
   日本語
 </p>
 
-Unity 向けの**ビジュアルなノードツリー / スキルツリー / テックツリー**プラグインです。1 つの `NodeTreeData` アセットに**ノード・ノードタイプ・状態タグ・キャンバスレイアウト**を集約し、**ビジュアルエディタ**（キャンバス上でのドラッグ / ズーム / パン / 接続）と、すぐ使える**ランタイム UI**（タイプ別オブジェクトプール、ビューポートカリング、URP 流光ライン）を同梱します。各ノードの状態は**タグ（Tag）**で表現され、セーブマネージャが管理します。解放条件は基盤パッケージ `com.ale.toolkit` の**条件システム（`Ale.Condition`）**で判定します。
+Unity 向けの**ビジュアルなノードツリー / スキルツリー / テックツリー**プラグインです。1 つの `NodeTreeData` アセットに**ノード・ノードタイプ・状態タグ・キャンバスレイアウト**を集約し、**ビジュアルエディタ**（キャンバス上でのドラッグ / ズーム / パン / 接続）と、すぐ使える**ランタイム UI**（タイプ別オブジェクトプール、ビューポートカリング、ホイールズーム、URP 流光ライン）を同梱します。各ノードの状態は**タグ（Tag）**で表現され、セーブマネージャが管理します。解放条件は基盤パッケージ `com.ale.toolkit` の**条件システム（`Ale.Condition`）**で判定します。
 
 - データ駆動：1 つの `NodeTreeData`（ScriptableObject）がツリー全体を保持。エディタは Undo / Redo に完全対応。
 - 高性能ランタイム：ノードタイプ別のオブジェクトプール、ビューポートカリングによるオンデマンド Spawn / Despawn、ライン Mesh のバッチ化でドローコール削減。
@@ -25,7 +25,7 @@ Unity 向けの**ビジュアルなノードツリー / スキルツリー / テ
 | **データ** | ノード / タイプ / 状態タグ / カスタム属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件** | Toolkit 条件システムへの接続 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、判定器（`NodeFinishedEvaluator` / `NodeUnlockedEvaluator` / `NodeHasTagEvaluator`） |
 | **セーブ** | ノードごとのタグ状態 | `NodeTreeSaveDataManager` |
-| **ランタイム UI** | ノードツリー表示・ホバーハイライト・情報ポップアップ・無限スクロール背景 | `UINodeTreeWindow`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **ランタイム UI** | ノードツリー表示・ホバーハイライト・情報ポップアップ・ホイールズーム・無限スクロール背景 | `UINodeTreeWindow`、`UINodeTreeZoomArea`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **エディタ** | ビジュアル編集 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **シェーダー** | 流光ライン | `NodeTree/NodeLineFlow` |
 
@@ -176,10 +176,21 @@ save.Load(json);
 - **ノードタイプごとにライン Mesh を統合生成**（ドローコール削減）。UV は `NodeTree/NodeLineFlow` と連携して流光表現；
 - `LateUpdate` でダーティフラグに応じてラインを再構築。
 - **情報ポップアップの一元管理**（1.6.0 以降）：`infoPanelPrefab` にポップアップのプレハブを指定すると、ウィンドウが自身の配下に `InfoPanelLayer`（ScrollView の外・最後の兄弟）とオブジェクトプールを自動生成し、ホバー時に**ノード中心 ＋ `infoPanelOffset`**（既定 `(0, 120)`。ノードの上）へ配置してスクロール / ズームに追従させます。詳細は [`UINodeInfoPanel`](#uinodeinfopanel)。
+- **ランタイムズーム**（1.7.0 以降）：ホイールは**カーソル位置を基点**に、スライダーはビューポート中心を基点にズームします。スケールするのは `nodeTreeRoot` の `localScale` です。範囲は `minZoom`~`maxZoom`（既定 `0.1`~`3`）、既定倍率は `defaultZoom`（`1`）、ホイール 1 ノッチごとに `zoomStepPerScroll`（`1.15`。全域でおよそ 24 ノッチ）を乗算します。`zoomSlider` を割り当てればドラッグでズームでき（ウィンドウ側で正規化 `0~1` に強制し、倍率とは**対数マッピング**。既定範囲では 1.0x が 68% の位置）、`zoomValueText` を割り当てれば `zoomValueFormat`（`"{0:0.0}x"`）で現在倍率を表示します。ホイールの入力領域はウィンドウが自動で用意します。詳細は [`UINodeTreeZoomArea`](#uinodetreezoomarea)。
 - `refreshStatesOnInit`：オンにすると `InitTree` 時に `NodeTreeSaveDataManager.RefreshAllNodeStates(config)` を自動実行し、全 `autoRefresh` タグを再計算。
 - `forceUnlockForTest` ＋ `forceUnlockTags`（デバッグ用。1.5.2 以降。旧名 `unlockAllForTest`）：スイッチをオンにすると `InitTree` 時に `forceUnlockTags` のタグを全ノードへ付与し、解放条件とセーブ状態を無視してツリー全体を確認できます。**リストが空の場合はタグ辞書（`NodeTreeData.tags`）のすべてのタグ**を付与します —— 設定ゼロで機能し、ホストがタグ名を変えてもスイッチが静かに無効化されません（「進入可否」を決めるのはホスト側であり、独自タグで判定しているホストに `Unlock` だけ付けても効果がないためです）。絞りたい場合のみリストに列挙してください。付与はメモリ上の状態のみで、セーブファイルは書き換えません。リリース前はオフに。
 
-**主な API**：`InitTree(NodeTreeData configOverride = null)`（ツリー全体を初期化 / 再構築）、`RefreshAllNodeStates()`（`NodeTreeSaveDataManager` 経由で全 auto タグを再計算）、`SelectNode(string nodeId)`、`RefreshVisibility()`（ビューポートカリングを再計算）、`MarkLineDirty()`（ラインを再構築対象としてマーク）、`ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)`（情報ポップアップ。ホバー時は自動的に呼ばれますが、「複数ノードのポップアップを固定表示する」用途で直接呼ぶこともできます）。
+**主な API**：`InitTree(NodeTreeData configOverride = null)`（ツリー全体を初期化 / 再構築）、`RefreshAllNodeStates()`（`NodeTreeSaveDataManager` 経由で全 auto タグを再計算）、`SelectNode(string nodeId)`、`RefreshVisibility()`（ビューポートカリングを再計算）、`MarkLineDirty()`（ラインを再構築対象としてマーク）、`ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)`（情報ポップアップ。ホバー時は自動的に呼ばれますが、「複数ノードのポップアップを固定表示する」用途で直接呼ぶこともできます）、`Zoom`（現在倍率）/ `SetZoom(float)`（ビューポート中心が基点）/ `SetZoom(float, Vector2)`（指定スクリーン座標が基点）/ `ResetZoom()` とイベント `ZoomChanged`（1.7.0 以降）。
+
+### `UINodeTreeZoomArea`
+
+ホイールズームの入力領域（`MonoBehaviour` + `IScrollHandler`）。唯一の役割は**正しい階層でホイールを受け取り**、そのまま `UINodeTreeWindow` へ渡すことです（オン / オフもステップ幅もウィンドウ側にあります）。ウィンドウが `InitTree` 時に `ScrollRect.viewport` へ**自動でアタッチ**します（`[AddComponentMenu("")]` を付けてあるため Add Component メニューには出ません）。**ホスト側で手動アタッチする必要はありません**。別の場所でホイールを受けたい場合はウィンドウの `zoomInputArea` を指定してください。
+
+**なぜ `IScrollHandler` をウィンドウ自身に実装しないのか**：`ScrollRect` も同じインターフェースを実装しており、uGUI のディスパッチは `ExecuteEvents.GetEventHandler<IScrollHandler>(レイキャスト対象)` —— 命中したオブジェクトから**上へ**辿って最初の実装者で止まります。ウィンドウは通常、画面全体のルートに付いていて ScrollView の**祖先**なので、必ず `ScrollRect` に負けます。`Content` に付けても駄目です —— カーソルが空白部分にあるときレイキャストが当たるのは `Viewport` の Image であり、`Content` は上へ辿る経路上に存在しません。両方の経路で先に来るのは `Viewport` だけです：ノード上なら「ノード → Content → **Viewport** → ScrollView」、空白上なら「**Viewport** → ScrollView」。
+
+⚠ 入力領域には `Raycast Target` が有効な `Graphic` が必要です（標準 ScrollView テンプレートの `Viewport` は `Image` を持つため既定で満たされます）。無い場合はウィンドウが警告を出します —— レイキャストが届かない状態はホイールが黙って効かなくなるという、このあたりで最も原因を追いにくい壊れ方だからです。
+
+`Input.mouseScrollDelta` を直接読まず `IScrollHandler` を通すことで、新旧インプットシステムの差異も回避できます —— EventSystem の入力モジュールが既に両者を正規化しており、どちらでもホイール 1 ノッチは ±1 です。
 
 ### `UINodeBase`
 

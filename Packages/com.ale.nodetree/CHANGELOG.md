@@ -6,6 +6,37 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.7.0] - 2026-08-31
+
+运行时节点树现在可以缩放：滚轮以光标为锚点，另可接一条滑条直接拖。既有工程**零迁移** —— 新增字段全是增量，资产 YAML 缺这些键时 Unity 反序列化保留 C# 初值；不接滑条就只有滚轮，`zoomEnabled` 关掉则完全恢复旧行为。
+
+### 新增
+
+- **`UINodeTreeWindow` 运行时缩放**：缩的是 `nodeTreeRoot` 的 `localScale`（它就是 ScrollRect 的 Content）。新增序列化字段 `zoomEnabled` / `minZoom`（`0.1`）/ `maxZoom`（`3`）/ `defaultZoom`（`1`）/ `zoomStepPerScroll`（`1.15`）/ `zoomInputArea` / `zoomSlider` / `zoomValueText` / `zoomValueFormat`（`"{0:0.0}x"`）/ `resetZoomOnInit`。
+- **新类 `UINodeTreeZoomArea`**（`MonoBehaviour` + `IScrollHandler`）：滚轮输入区，由窗口在 `InitTree` 时**自动装配**到 `ScrollRect.viewport` 上（打了 `[AddComponentMenu("")]`，不出现在 Add Component 菜单里），宿主无需接线；窗口销毁时只拆自己装上去的那一个，宿主手工挂的原样留着。
+
+  **为什么必须单开一个组件、而且必须装在 `Viewport` 上**：`ScrollRect` 自己就实现了 `IScrollHandler`，而 uGUI 的派发是 `ExecuteEvents.GetEventHandler<IScrollHandler>(射线命中物)` —— 从命中物**向上**找第一个实现者，找到即止。窗口通常挂在整个界面的根上、是 ScrollView 的**祖先**，永远排在 ScrollRect 后面；挂 `Content` 上也不行 —— 光标停在空白处时射线命中的是 `Viewport` 的 Image，`Content` 根本不在向上的那条路径里。只有 `Viewport` 两条路径都占先：命中节点是「节点 → Content → **Viewport** → ScrollView」，命中空白是「**Viewport** → ScrollView」。
+
+  走 `IScrollHandler` 而不是直接读 `Input.mouseScrollDelta`，还顺带绕开了新旧输入系统的分歧 —— EventSystem 的输入模块已经把两者归一化，两种模块下每格滚轮都是 ±1。
+
+- **Demo 窗口预制体加了缩放滑条**：`UIStoryTreeWindow.prefab` 底部居中新增 `SliderZoom`（Unity 默认 Slider 结构）与倍率文本 `TxtZoom`，并已接到窗口上。`Assets/Demo` 与 `Samples~/Demo` 两份拷贝已同步。
+
+### 变更
+
+- **滚轮以光标为锚点**：改完 `localScale` 后给 `nodeTreeRoot.anchoredPosition` 补一段位移，使光标下的那个点停在原处 —— 与可视化编辑器画布的滚轮缩放手感一致。滑条没有「光标位置」可言，故以**视口中心**为锚点。
+- **滑条走归一化取值 + 对数映射**：窗口在 `InitTree` 时强制把滑条设成 `minValue = 0` / `maxValue = 1` / `wholeNumbers = false`，倍率映射由窗口负责（`t = ln(zoom / minZoom) / ln(maxZoom / minZoom)`）。这样换缩放范围时不必再去改每个界面上滑条的 Min / Max；对数映射也让低倍段（0.1x~0.5x）不至于被挤成滑条最左边一小截。默认范围下 1.0x 落在 68% 处。反向刷新滑条走 `SetValueWithoutNotify`，否则「写滑条 → `onValueChanged` → 缩放 → 再写滑条」会成环。
+- **滚轮步进是乘性的**（`zoom *= zoomStepPerScroll ^ scrollDelta.y`，用 `Pow` 以便触控板那种小数增量也平滑生效）：配对数滑条，每格滚轮在滑条上移动的距离才是等距的，缩放手感在任何倍率下也才一致（0.2x 时不会一格就跳一大截）。默认 `1.15`，走完 0.1x~3.0x 全程约 24 格。
+- **`InitTree` 会落一次倍率**：`resetZoomOnInit`（默认开）时回到 `defaultZoom`，关掉则跨越重建保留当前倍率；`zoomEnabled` 为 `false` 时把树还原成 1 倍，不让上一次的缩放状态留在场上。
+- **缩放时停掉 ScrollRect 的惯性**（`StopMovement()`）：否则滚轮缩放期间残留的甩动会在随后几帧把刚对齐的视口又带跑。
+- **`OnValidate` 夹住缩放参数**：`minZoom` ≥ `0.01`（对数映射要除 `ln(maxZoom / minZoom)`，`minZoom` ≤ 0 会除出 NaN）、`maxZoom` > `minZoom`、`defaultZoom` 落在两者之间、`zoomStepPerScroll` > 1。
+- **既有表现天然兼容，未作改动**：ScrollRect 的边界计算走 `content.GetWorldCorners()`，`localScale` 天然被计入，夹取 / 弹性回弹 / 惯性照常工作；视口裁剪本就在 `LateUpdate` 里比较 `lossyScale`、并按 `lossyScale` 折算节点半尺寸到屏幕像素，缩放后 Spawn / Despawn 依旧正确；信息弹窗的偏移施加在弹窗层空间，**不随缩放变小**；连线 Mesh 在 Content 之下，随之缩放（线宽也一起缩）；`UIScrollingBackground` 只跟 `Content.anchoredPosition` 的**增量**走，故锚点补偿会让背景平移一下（与手动平移无异），背景本身不缩放。
+- **`NodeTreeData.zoom` 仍是保留字段**：那是**编辑器画布**的缩放，与运行时缩放是两码事，本次没有复用它。
+
+### API
+
+- `UINodeTreeWindow` **新增**：`public float Zoom { get; }`、`public void SetZoom(float zoom)`（以视口中心为锚点）、`public void SetZoom(float zoom, Vector2 screenPoint)`（以指定屏幕点为锚点）、`public void ResetZoom()`、`public event Action<float> ZoomChanged`；序列化字段 `zoomEnabled` / `minZoom` / `maxZoom` / `defaultZoom` / `zoomStepPerScroll` / `zoomInputArea` / `zoomSlider` / `zoomValueText` / `zoomValueFormat` / `resetZoomOnInit`。
+- **新类** `UINodeTreeZoomArea`：`public UINodeTreeWindow Window { get; internal set; }`、`public void OnScroll(PointerEventData eventData)`。
+
 ## [1.6.0] - 2026-08-25
 
 信息弹窗从节点内部拆出，改由 `UINodeTreeWindow` 用对象池统一管理。**本版含破坏性变更**（版本号按项目约定停留在次版本位），升级前请先读下方迁移步骤。

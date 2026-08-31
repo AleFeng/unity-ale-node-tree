@@ -7,7 +7,7 @@
   <a href="./README_JA.md">日本語</a>
 </p>
 
-A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeData` asset centralizes **nodes, node types, state tags, and canvas layout**; it ships with a **visual editor** (drag / zoom / pan / connect on a canvas) and a set of **ready-to-use runtime UI** (per-type object pooling, viewport culling, URP flowing-line shader). Each node's state is carried by **tags** maintained in a save manager, and the condition that attaches a tag is evaluated through `com.ale.toolkit`'s **Condition System** (`Ale.Condition`).
+A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeData` asset centralizes **nodes, node types, state tags, and canvas layout**; it ships with a **visual editor** (drag / zoom / pan / connect on a canvas) and a set of **ready-to-use runtime UI** (per-type object pooling, viewport culling, wheel zoom, URP flowing-line shader). Each node's state is carried by **tags** maintained in a save manager, and the condition that attaches a tag is evaluated through `com.ale.toolkit`'s **Condition System** (`Ale.Condition`).
 
 - Data-driven: a single `NodeTreeData` (ScriptableObject) holds the whole tree; the editor is fully Undo / Redo aware.
 - High-performance runtime: object pooling per node type, on-demand Spawn / Despawn via viewport culling, batched line meshes to cut draw calls.
@@ -25,7 +25,7 @@ A **visual node-tree / skill-tree / tech-tree** plugin for Unity. One `NodeTreeD
 | **Data** | Node / type / state tags / custom attributes | `NodeData`, `NodeTypeData`, `LineTypeData`, `NodeTagData`, `NodeTagRule` |
 | **Conditions** | node-tree condition wiring (into toolkit `Ale.Condition`) | `INodeTreeStateSource`, `NodeTreeConditionContext`, `NodeTreeTags`; evaluators `NodeFinished` · `NodeUnlocked` · `NodeHasTag` |
 | **Save** | Per-node tag state | `NodeTreeSaveDataManager` |
-| **Runtime UI** | Node-tree presentation, hover highlight, info popups & infinite scrolling background | `UINodeTreeWindow`, `UINodeBase`, `UINodeInfoPanel`, `UIScrollingBackground`, `NodeLineBuilder` |
+| **Runtime UI** | Node-tree presentation, hover highlight, info popups, wheel zoom & infinite scrolling background | `UINodeTreeWindow`, `UINodeTreeZoomArea`, `UINodeBase`, `UINodeInfoPanel`, `UIScrollingBackground`, `NodeLineBuilder` |
 | **Editor** | Visual editing | `NodeTreeEditorWindow`, `NodeDrawer`, `NodeTreeCanvasState`, `NodeTreeDataEditor` |
 | **Shader** | Flowing line | `NodeTree/NodeLineFlow` |
 
@@ -180,10 +180,21 @@ The runtime node-tree UI window (a standalone `MonoBehaviour`). Attach it to a U
 - **Merges a line mesh per node type** (fewer draw calls); UVs pair with `NodeTree/NodeLineFlow` for the flow effect;
 - Rebuilds lines on demand in `LateUpdate` via a dirty flag;
 - **Owns the info popups** (since 1.6.0): `infoPanelPrefab` names the popup prefab; the window creates an `InfoPanelLayer` under itself (outside the ScrollView, last sibling) plus a pool, positions popups at **the node centre plus `infoPanelOffset`** (default `(0, 120)`, i.e. above the node) on hover and keeps them following while the tree scrolls or zooms. See [`UINodeInfoPanel`](#uinodeinfopanel).
+- **Runtime zoom** (since 1.7.0): the wheel zooms **around the cursor**, the slider around the viewport centre; what is scaled is `nodeTreeRoot.localScale`. Range `minZoom`~`maxZoom` (default `0.1`~`3`), default factor `defaultZoom` (`1`), each wheel notch multiplies by `zoomStepPerScroll` (`1.15`, roughly 24 notches across the whole range). Assign a `zoomSlider` to drag-zoom (the window forces it onto normalized `0~1` values and maps them **logarithmically**, so 1.0x sits at 68% under the default range), and a `zoomValueText` to display the current factor via `zoomValueFormat` (`"{0:0.0}x"`). The wheel input area is wired up by the window itself — see [`UINodeTreeZoomArea`](#uinodetreezoomarea).
 - When `refreshStatesOnInit` is on, `InitTree` calls `RefreshAllNodeStates` so auto tags (e.g. `Unlock`) resolve on open.
 - `forceUnlockForTest` + `forceUnlockTags` (debug; since 1.5.2, formerly `unlockAllForTest`): with the toggle on, `InitTree` stamps the tags listed in `forceUnlockTags` onto every node, bypassing unlock conditions and save state so you can inspect the whole tree. **Leave the list empty to stamp every tag in the vocabulary** (`NodeTreeData.tags`) — that default works with zero configuration and cannot go silently ineffective when a host renames its tags, since the host decides what "enterable" means and stamping only `Unlock` does nothing for a host keying off its own tag. Fill the list in when you want to narrow it down. Tags go into the in-memory state only, never into the save file; keep it off for release builds.
 
-**Main API**: `InitTree(NodeTreeData configOverride = null)` (initialize / rebuild the whole tree), `SelectNode(string nodeId)`, `RefreshVisibility()` (recompute viewport culling), `MarkLineDirty()` (flag lines for rebuild), `RefreshAllNodeStates()` (recompute auto tags via `NodeTreeSaveDataManager`), `ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)` (info popups; hovering calls these for you, but you can also drive them directly to pin popups on several nodes).
+**Main API**: `InitTree(NodeTreeData configOverride = null)` (initialize / rebuild the whole tree), `SelectNode(string nodeId)`, `RefreshVisibility()` (recompute viewport culling), `MarkLineDirty()` (flag lines for rebuild), `RefreshAllNodeStates()` (recompute auto tags via `NodeTreeSaveDataManager`), `ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)` (info popups; hovering calls these for you, but you can also drive them directly to pin popups on several nodes), plus `Zoom` (current factor), `SetZoom(float)` (anchored at the viewport centre), `SetZoom(float, Vector2)` (anchored at a screen point), `ResetZoom()` and the `ZoomChanged` event (since 1.7.0).
+
+### `UINodeTreeZoomArea`
+
+The wheel-zoom input area (`MonoBehaviour` + `IScrollHandler`). Its one job is to catch the wheel **at the right level of the hierarchy** and forward it verbatim to `UINodeTreeWindow` (the toggle and the step size both live over there). The window **installs it automatically** on `ScrollRect.viewport` during `InitTree` (it carries `[AddComponentMenu("")]`, so it never shows up in the Add Component menu) — **hosts never attach it by hand**; to catch the wheel somewhere else, fill in the window's `zoomInputArea`.
+
+**Why `IScrollHandler` is not implemented on the window itself**: `ScrollRect` implements it too, and uGUI dispatches through `ExecuteEvents.GetEventHandler<IScrollHandler>(raycast target)` — which walks **upwards** from the hit object and stops at the first implementer. The window normally sits on the root of the whole screen, i.e. an **ancestor** of the ScrollView, so it always loses to `ScrollRect`; `Content` does not work either — with the cursor over empty space the raycast hits the `Viewport` image, and `Content` is simply not on the way up. Only `Viewport` wins both paths: over a node it is "node → Content → **Viewport** → ScrollView", over empty space "**Viewport** → ScrollView".
+
+⚠ The input area needs a `Graphic` with `Raycast Target` on (the standard ScrollView template's `Viewport` already carries an `Image`, so this holds by default). Without one the window logs a warning — an area that receives no raycasts means the wheel silently does nothing, which is the hardest way for this to break.
+
+Going through `IScrollHandler` rather than reading `Input.mouseScrollDelta` also sidesteps the old/new input system split: the EventSystem's input module already normalizes both, and one wheel notch is ±1 under either.
 
 ### `UINodeBase`
 

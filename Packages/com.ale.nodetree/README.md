@@ -7,7 +7,7 @@
   <a href="./README_JA.md">日本語</a>
 </p>
 
-面向 Unity 的**可视化节点树 / 技能树 / 科技树**插件。用一个 `NodeTreeData` 资产集中配置**节点、节点类型、状态标签与画布布局**；配套一个**可视化编辑器**（画布拖拽 / 缩放 / 平移 / 连线）与一套**开箱即用的运行时 UI**（按类型对象池化、视口裁剪、URP 流光连线）。节点状态以**标签（Tag）**承载（内置 **Unlock / Finished**），由存档管理器维护；每个标签的挂载门槛用 `com.ale.toolkit` 条件系统（`Ale.Condition`）的 `ConditionExpression` 描述。
+面向 Unity 的**可视化节点树 / 技能树 / 科技树**插件。用一个 `NodeTreeData` 资产集中配置**节点、节点类型、状态标签与画布布局**；配套一个**可视化编辑器**（画布拖拽 / 缩放 / 平移 / 连线）与一套**开箱即用的运行时 UI**（按类型对象池化、视口裁剪、滚轮缩放、URP 流光连线）。节点状态以**标签（Tag）**承载（内置 **Unlock / Finished**），由存档管理器维护；每个标签的挂载门槛用 `com.ale.toolkit` 条件系统（`Ale.Condition`）的 `ConditionExpression` 描述。
 
 - 数据驱动：一个 `NodeTreeData`（ScriptableObject）承载整棵树，编辑器全程 Undo / Redo。
 - 高性能运行时：按节点类型对象池化、视口裁剪按需 Spawn / Despawn、连线 Mesh 合批降 DrawCall。
@@ -25,7 +25,7 @@
 | **数据** | 节点 / 类型 / 标签 / 自定义属性 | `NodeData`、`NodeTypeData`、`LineTypeData`、`NodeTagData`、`NodeTagRule` |
 | **条件** | 接入 Toolkit `Ale.Condition` 与内置判定器 | `INodeTreeStateSource`、`NodeTreeConditionContext`、`NodeTreeTags`、`NodeFinishedEvaluator`、`NodeUnlockedEvaluator`、`NodeHasTagEvaluator` |
 | **存档** | 节点状态标签 | `NodeTreeSaveDataManager` |
-| **运行时 UI** | 节点树展示、悬停高亮、信息弹窗与无限滚动背景 | `UINodeTreeWindow`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
+| **运行时 UI** | 节点树展示、悬停高亮、信息弹窗、滚轮缩放与无限滚动背景 | `UINodeTreeWindow`、`UINodeTreeZoomArea`、`UINodeBase`、`UINodeInfoPanel`、`UIScrollingBackground`、`NodeLineBuilder` |
 | **编辑器** | 可视化编辑 | `NodeTreeEditorWindow`、`NodeDrawer`、`NodeTreeCanvasState`、`NodeTreeDataEditor` |
 | **Shader** | 流光连线 | `NodeTree/NodeLineFlow` |
 
@@ -177,10 +177,21 @@ save.Load(json);
 - **为每种节点类型合并生成连线 Mesh**（减少 DrawCall），UV 配合 `NodeTree/NodeLineFlow` 做流光；
 - 在 `LateUpdate` 中按脏标记按需重建连线；
 - **统一管理信息弹窗**（1.6.0 起）：`infoPanelPrefab` 指定弹窗预制体，窗口自动在自己下面建 `InfoPanelLayer`（ScrollView 之外、最后一个兄弟）与对象池；悬停时定位到**节点中心 + `infoPanelOffset`**（默认 `(0, 120)`，即节点上方），并随滚动 / 缩放跟随。详见 [`UINodeInfoPanel`](#uinodeinfopanel)。
+- **运行时缩放**（1.7.0 起）：滚轮**以光标为锚点**、滑条以视口中心为锚点，缩的是 `nodeTreeRoot` 的 `localScale`。范围 `minZoom`~`maxZoom`（默认 `0.1`~`3`）、默认倍率 `defaultZoom`（`1`）、滚轮每格乘 `zoomStepPerScroll`（`1.15`，全程约 24 格）。接一根 `zoomSlider` 即可拖动缩放（窗口会强制它走归一化 `0~1` 取值，与倍率之间是**对数映射**，默认范围下 1.0x 落在 68% 处），再接一个 `zoomValueText` 就能按 `zoomValueFormat`（`"{0:0.0}x"`）显示当前倍率。滚轮输入区由窗口自动装配，见 [`UINodeTreeZoomArea`](#uinodetreezoomarea)。
 - `refreshStatesOnInit`：勾选后在 `InitTree` 时自动调用 `RefreshAllNodeStates`（按存档与条件刷新所有自动标签）。
 - `forceUnlockForTest` + `forceUnlockTags`【测试用】（1.5.2 起，原 `unlockAllForTest`）：勾选开关后，`InitTree` 给每个节点挂上 `forceUnlockTags` 里的标签，绕过解锁条件与存档状态，便于查看整棵树的完整结构。**列表留空则挂上词表（`NodeTreeData.tags`）里的全部标签**——零配置即生效，宿主改了标签名也不会让开关静默失效（节点能不能进由宿主说了算，只挂 `Unlock` 对用自定义标签判定的宿主毫无作用）。需要收窄时再逐条填写。只往内存态里加标签，不改存档文件；发布前应保持关闭。
 
-**主要 API**：`InitTree(NodeTreeData configOverride = null)`（初始化 / 重建整棵树）、`RefreshAllNodeStates()`（对当前 `config` 调 `NodeTreeSaveDataManager.RefreshAllNodeStates`）、`SelectNode(string nodeId)`、`RefreshVisibility()`（重算视口裁剪）、`MarkLineDirty()`（标记连线待重建）、`ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)`（信息弹窗；悬停会自动调用，也可由外部直接调用来「钉住某几个节点的弹窗」）。
+**主要 API**：`InitTree(NodeTreeData configOverride = null)`（初始化 / 重建整棵树）、`RefreshAllNodeStates()`（对当前 `config` 调 `NodeTreeSaveDataManager.RefreshAllNodeStates`）、`SelectNode(string nodeId)`、`RefreshVisibility()`（重算视口裁剪）、`MarkLineDirty()`（标记连线待重建）、`ShowNodeInfoPanel(string nodeId)` / `HideNodeInfoPanel(string nodeId)` / `HideAllNodeInfoPanels(bool instant = false)`（信息弹窗；悬停会自动调用，也可由外部直接调用来「钉住某几个节点的弹窗」）、`Zoom`（当前倍率）/ `SetZoom(float)`（以视口中心为锚点）/ `SetZoom(float, Vector2)`（以指定屏幕点为锚点）/ `ResetZoom()` 与事件 `ZoomChanged`（1.7.0 起）。
+
+### `UINodeTreeZoomArea`
+
+滚轮缩放的输入区（`MonoBehaviour` + `IScrollHandler`）。唯一职责是在**正确的层级上**接住滚轮，原样转交 `UINodeTreeWindow`（开关与步进都在窗口那边）。由窗口在 `InitTree` 时**自动装配**到 `ScrollRect.viewport` 上（打了 `[AddComponentMenu("")]`，不出现在 Add Component 菜单里），**宿主不需要手工挂载**；想换个地方接滚轮，填窗口的 `zoomInputArea` 即可。
+
+**为什么不把 `IScrollHandler` 直接实现在窗口上**：`ScrollRect` 自己就实现了它，而 uGUI 的派发是 `ExecuteEvents.GetEventHandler<IScrollHandler>(射线命中物)` —— 从命中物**向上**找第一个实现者，找到即止。窗口通常挂在整个界面的根上、是 ScrollView 的**祖先**，永远排在 ScrollRect 后面；挂 `Content` 上也不行 —— 光标停在空白处时射线命中的是 `Viewport` 的 Image，`Content` 根本不在向上的那条路径里。只有 `Viewport` 两条路径都占先：命中节点是「节点 → Content → **Viewport** → ScrollView」，命中空白是「**Viewport** → ScrollView」。
+
+⚠ 输入区上必须有一个开着 `Raycast Target` 的 `Graphic`（标准 ScrollView 模板的 `Viewport` 自带 `Image`，天然满足）。没有的话窗口会告警 —— 收不到射线就是滚轮静默失灵，是这套东西最难查的一种坏法。
+
+走 `IScrollHandler` 而不是直接读 `Input.mouseScrollDelta`，还顺带绕开了新旧输入系统的分歧 —— EventSystem 的输入模块已经把两者归一化，两种模块下每格滚轮都是 ±1。
 
 ### `UINodeBase`
 
