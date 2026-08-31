@@ -18,8 +18,10 @@ namespace Ale.NodeTree.Runtime
     /// 时<b>自动装配</b>到 <c>ScrollRect.viewport</c> 上，不需要（也不该）手工挂载；想换个地方接滚轮，
     /// 改窗口的 <c>zoomInputArea</c> 即可。</para>
     ///
-    /// <para>走 <c>IScrollHandler</c> 而不是直接读 <c>Input.mouseScrollDelta</c>，还顺带绕开了新旧输入
-    /// 系统的分歧 —— EventSystem 的输入模块已经把两者归一化，两种模块下每格滚轮都是 ±1。</para>
+    /// <para>走 <c>IScrollHandler</c> 而不是直接读 <c>Input.mouseScrollDelta</c>，是为了不依赖具体输入
+    /// 后端 —— 新旧输入系统都会把滚轮送到这里来。⚠ 但两者<b>并没有</b>把数值归一化：旧的
+    /// <c>StandaloneInputModule</c> 每格给 ±1，新输入系统的 <c>InputSystemUIInputModule</c> 每格给
+    /// <c>scrollDeltaPerTick</c>（默认 6）。折算交给窗口的 <c>ScrollUnitsPerNotch</c>，本组件只管转交。</para>
     /// </summary>
     [AddComponentMenu("")] // 由窗口自动装配，不出现在 Add Component 菜单里
     public class UINodeTreeZoomArea : MonoBehaviour, IScrollHandler

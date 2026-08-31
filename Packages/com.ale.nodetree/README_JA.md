@@ -190,7 +190,7 @@ save.Load(json);
 
 ⚠ 入力領域には `Raycast Target` が有効な `Graphic` が必要です（標準 ScrollView テンプレートの `Viewport` は `Image` を持つため既定で満たされます）。無い場合はウィンドウが警告を出します —— レイキャストが届かない状態はホイールが黙って効かなくなるという、このあたりで最も原因を追いにくい壊れ方だからです。
 
-`Input.mouseScrollDelta` を直接読まず `IScrollHandler` を通すことで、新旧インプットシステムの差異も回避できます —— EventSystem の入力モジュールが既に両者を正規化しており、どちらでもホイール 1 ノッチは ±1 です。
+`Input.mouseScrollDelta` を直接読まず `IScrollHandler` を通すのは、入力バックエンドに依存しないためです —— 新旧どちらのインプットシステムもホイールをここへ届けます。⚠ ただし**値そのものは正規化されません**：`StandaloneInputModule` は 1 ノッチ ±1、新インプットシステムの `InputSystemUIInputModule` は自身の `scrollDeltaPerTick`（既定 6）を返します。ウィンドウ側で `scrollDelta` を**ノッチ数**へ換算してから `zoomStepPerScroll` を掛けるため（1.7.2 以降）、設定した値がそのまま 1 ノッチあたりの増減になります。
 
 ### `UINodeBase`
 

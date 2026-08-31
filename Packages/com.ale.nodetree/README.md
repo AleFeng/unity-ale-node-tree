@@ -191,7 +191,7 @@ save.Load(json);
 
 ⚠ 输入区上必须有一个开着 `Raycast Target` 的 `Graphic`（标准 ScrollView 模板的 `Viewport` 自带 `Image`，天然满足）。没有的话窗口会告警 —— 收不到射线就是滚轮静默失灵，是这套东西最难查的一种坏法。
 
-走 `IScrollHandler` 而不是直接读 `Input.mouseScrollDelta`，还顺带绕开了新旧输入系统的分歧 —— EventSystem 的输入模块已经把两者归一化，两种模块下每格滚轮都是 ±1。
+走 `IScrollHandler` 而不是直接读 `Input.mouseScrollDelta`，是为了不依赖具体输入后端 —— 新旧输入系统都会把滚轮送到这里来。⚠ 但两者**并没有**把数值归一化：旧的 `StandaloneInputModule` 每格给 ±1，新输入系统的 `InputSystemUIInputModule` 每格给它的 `scrollDeltaPerTick`（默认 6）。窗口会先把 `scrollDelta` 折算成**格数**再乘 `zoomStepPerScroll`（1.7.2 起），所以配多少就是每格加减多少。
 
 ### `UINodeBase`
 

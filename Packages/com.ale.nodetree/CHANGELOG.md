@@ -6,6 +6,30 @@
 
 > 迁移说明（2026-07-28）：插件位置由 `Assets/Plugins/Ale Node Tree` 迁移至内嵌 UPM 包 `Packages/com.ale.nodetree`；程序集 `Ale.NodeTree.Runtime` / `Ale.NodeTree.Editor`、命名空间 `Ale.NodeTree.*` 保持不变。所有资产按 GUID 引用，场景 / 预制体 / 配置资产不受影响。
 
+## [1.7.2] - 2026-08-31
+
+修复滚轮步长与 `zoomStepPerScroll` 对不上：配 `0.1`，实际每格跳 `0.6`。
+
+### 修复
+
+- **`scrollDelta` 先折算成「格数」再乘步进**（新增内部方法 `UINodeTreeWindow.ScrollUnitsPerNotch`）。
+  此前直接把 `scrollDelta.y` 当格数用，而它的单位**随输入模块而异**：旧的 `StandaloneInputModule`
+  透传 `Input.mouseScrollDelta`，每格 ±1；新输入系统的 `InputSystemUIInputModule` 每格给的是它的
+  `scrollDeltaPerTick`（**默认 6**，且可在该组件上改）。于是在新输入系统下，加性步进配 `0.1` 实际每格跳 `0.6`；
+  1.7.0 的乘性步进同样中招（配 `1.15` 实际每格 ×2.31）。
+
+  本包不引用 Input System 程序集（宿主可能根本没装它），故按属性名反射读 `scrollDeltaPerTick`；
+  读不到就按模块类型名回落（1.8 之前的 `InputSystemUIInputModule` 没有这个属性，但比例同样是 6）。
+  反射开销只在模块类型变化时付一次。折算之后，触控板那种小数增量仍按比例生效。
+
+  **无需改动任何资产**：`zoomStepPerScroll` 的语义没变，`0.1` 就是每格 0.1x —— 现在才真的是。
+
+### 订正
+
+- 1.7.0 的条目与三份 README 里「EventSystem 的输入模块已经把两者归一化，两种模块下每格滚轮都是 ±1」
+  的说法**是错的**。两个模块都把滚轮送到同一个 `IScrollHandler` 这点为真，但**数值并没有被归一化**；
+  走 `IScrollHandler` 换来的是「不依赖具体输入后端」，不包括单位统一。README 已订正，此处存照。
+
 ## [1.7.1] - 2026-08-31
 
 滚轮步进由**乘性**改为**加性**：`zoomStepPerScroll` 现在就是「每格加减多少倍率」，填多少就是多少。

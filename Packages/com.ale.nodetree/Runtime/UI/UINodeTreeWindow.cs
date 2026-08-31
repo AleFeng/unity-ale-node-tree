@@ -1062,7 +1062,8 @@ namespace Ale.NodeTree.Runtime
         [SerializeField] private float defaultZoom = 1f;
 
         [Tooltip("每格滚轮增减的倍率值（加性）。0.1 = 每格加减 0.1x，走完 0.1x~3.0x 全程约 29 格。\n" +
-                 "加性的好处是配置直观：填多少就是每格加减多少。\n" +
+                 "加性的好处是配置直观：填多少就是每格加减多少（scrollDelta 会先折算成格数，\n" +
+                 "不受输入模块单位差异影响）。\n" +
                  "代价是各倍率下的手感不一致 —— 同样一格，在 0.1x 处是翻倍，在 3.0x 处只有 3%。")]
         [SerializeField] private float zoomStepPerScroll = 0.1f;
 
@@ -1116,9 +1117,9 @@ namespace Ale.NodeTree.Runtime
 
         /// <summary>
         /// 滚轮缩放。由 <see cref="UINodeTreeZoomArea"/> 转调，宿主不必自己接线。
-        /// 步进是<b>加性</b>的：<c>zoom += zoomStepPerScroll * scrollDelta.y</c> ——
-        /// 配置直观，填多少就是每格加减多少。乘上 <c>scrollDelta.y</c> 而不是固定加减一次，
-        /// 是为了让触控板那种小数增量也能按比例生效。
+        /// 步进是<b>加性</b>的：<c>zoom += zoomStepPerScroll * 格数</c> —— 配置直观，填多少就是每格加减多少。
+        /// <para>格数由 <see cref="ScrollUnitsPerNotch"/> 折算而来，<b>不能直接拿 <c>scrollDelta.y</c> 当格数</b>；
+        /// 乘的是折算后的格数而非固定加减一次，是为了让触控板那种小数增量也按比例生效。</para>
         /// </summary>
         internal void ZoomByScroll(PointerEventData eventData)
         {
@@ -1127,8 +1128,50 @@ namespace Ale.NodeTree.Runtime
             float delta = eventData.scrollDelta.y;
             if (Mathf.Approximately(delta, 0f)) return;
 
-            ApplyZoom(_zoom + zoomStepPerScroll * delta,
+            float notches = delta / ScrollUnitsPerNotch(eventData);
+            ApplyZoom(_zoom + zoomStepPerScroll * notches,
                       ScreenPointToTreeWorld(eventData.position));
+        }
+
+        // 上次解析过的输入模块类型与其 scrollDeltaPerTick 属性（反射只在模块类型变化时做一次）
+        private Type                                 _scrollModuleType;
+        private System.Reflection.PropertyInfo       _scrollPerTickProp;
+        private float                                _scrollPerTickFallback = 1f;
+
+        /// <summary>
+        /// 一格滚轮对应的 <c>scrollDelta.y</c> 数值。用它把 <c>scrollDelta.y</c> 除成「格数」。
+        ///
+        /// <para><b>为什么必须折算</b>：这个值随输入模块而异，且<b>没有</b>跨模块的公开常量可问 ——
+        /// 旧的 <c>StandaloneInputModule</c> 直接透传 <c>Input.mouseScrollDelta</c>，每格 ±1；
+        /// 新输入系统的 <c>InputSystemUIInputModule</c> 每格给的是它的 <c>scrollDeltaPerTick</c>
+        /// （默认 <b>6</b>，而且可以在那个组件上改）。不折算的话，把步进配成 0.1 实际会跳 0.6。</para>
+        ///
+        /// <para>本包不引用 Input System 程序集（宿主可能根本没装），所以按属性名反射去读那个值；
+        /// 读不到就按模块类型名回落（1.8 之前的 <c>InputSystemUIInputModule</c> 没有这个属性，
+        /// 但比例同样是 6）。反射的开销只在模块类型变化时付一次。</para>
+        /// </summary>
+        private float ScrollUnitsPerNotch(PointerEventData eventData)
+        {
+            var module = eventData.currentInputModule;
+            if (!module) return 1f;
+
+            var type = module.GetType();
+            if (type != _scrollModuleType)
+            {
+                _scrollModuleType  = type;
+                _scrollPerTickProp = type.GetProperty("scrollDeltaPerTick");
+                if (_scrollPerTickProp != null && _scrollPerTickProp.PropertyType != typeof(float))
+                    _scrollPerTickProp = null;
+                _scrollPerTickFallback = type.Name == "InputSystemUIInputModule" ? 6f : 1f;
+            }
+
+            // 每次都读属性而不是缓存数值：宿主可以在运行时改 scrollDeltaPerTick
+            float units = _scrollPerTickProp != null
+                ? (float)_scrollPerTickProp.GetValue(module, null)
+                : _scrollPerTickFallback;
+
+            units = Mathf.Abs(units);
+            return units < 0.0001f ? 1f : units; // 配成 0 时别把格数除成无穷
         }
 
         /// <summary>

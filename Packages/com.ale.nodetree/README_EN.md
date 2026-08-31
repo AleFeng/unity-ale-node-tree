@@ -194,7 +194,7 @@ The wheel-zoom input area (`MonoBehaviour` + `IScrollHandler`). Its one job is t
 
 ⚠ The input area needs a `Graphic` with `Raycast Target` on (the standard ScrollView template's `Viewport` already carries an `Image`, so this holds by default). Without one the window logs a warning — an area that receives no raycasts means the wheel silently does nothing, which is the hardest way for this to break.
 
-Going through `IScrollHandler` rather than reading `Input.mouseScrollDelta` also sidesteps the old/new input system split: the EventSystem's input module already normalizes both, and one wheel notch is ±1 under either.
+Going through `IScrollHandler` rather than reading `Input.mouseScrollDelta` keeps this independent of the input backend — both the old and the new input system deliver the wheel here. ⚠ Neither of them normalizes the **value**, though: `StandaloneInputModule` gives ±1 per notch, while `InputSystemUIInputModule` gives its `scrollDeltaPerTick` (6 by default). The window converts `scrollDelta` into **notches** before applying `zoomStepPerScroll` (since 1.7.2), so the configured step really is the per-notch step.
 
 ### `UINodeBase`
 
