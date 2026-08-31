@@ -1,7 +1,11 @@
+using System;
 using System.Collections.Generic;
 using Ale.Toolkit.Runtime;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.Serialization;
+using UnityEngine.UI;
 
 namespace Ale.NodeTree.Runtime
 {
@@ -13,7 +17,9 @@ namespace Ale.NodeTree.Runtime
     ///  - 通过视口裁剪按需 Spawn/Despawn 节点UI；
     ///  - 为每种节点类型合并生成连线 Mesh（减少 DrawCall），
     ///    UV.x 用于边缘渐变，UV.y 用于流动效果（配合 NodeLineFlow.shader）；
-    ///  - 在 LateUpdate 中按脏标记按需重建连线 Mesh。
+    ///  - 在 LateUpdate 中按脏标记按需重建连线 Mesh；
+    ///  - 运行时缩放（1.7.0 起）：滚轮以光标为锚点、滑条以视口中心为锚点，
+    ///    缩的是 nodeTreeRoot 的 localScale（见 ApplyZoom 的方法注释）。
     /// </summary>
     public class UINodeTreeWindow : MonoBehaviour
     {
@@ -23,7 +29,8 @@ namespace Ale.NodeTree.Runtime
 
         [Tooltip("节点树UI根容器（通常为 ScrollView 的 Content 节点）。\n" +
                  "运行时会在此节点下自动创建 LineContainer（连线层，最底层）\n" +
-                 "和 NodeContainer（节点层，最顶层），并自动计算根容器的 Size。")]
+                 "和 NodeContainer（节点层，最顶层），并自动计算根容器的 Size。\n" +
+                 "启用缩放时其 localScale 由本组件驱动，请勿在别处改写。")]
         [SerializeField] private RectTransform nodeTreeRoot;
         [Tooltip("节点树四周内边距（x=左, y=上, z=右, w=下）。\n" +
                  "在所有节点的外围增加留白，避免节点被 ScrollView 边缘裁剪。")]
@@ -153,6 +160,15 @@ namespace Ale.NodeTree.Runtime
             // 只销毁本窗口自己建的弹窗层；Inspector 手动指定的层归使用者所有，不能替他销毁。
             if (_ownsInfoPanelLayer && _infoPanelLayer) Destroy(_infoPanelLayer.gameObject);
             _infoPanelLayer = null;
+
+            // 4) 拆掉缩放接线：自己装到 Viewport 上的输入区组件销毁；滑条是宿主的东西，
+            //    不能留着一条指向已销毁窗口的订阅。
+            ReleaseZoomArea();
+            if (_hookedZoomSlider)
+            {
+                _hookedZoomSlider.onValueChanged.RemoveListener(OnZoomSliderChanged);
+                _hookedZoomSlider = null;
+            }
         }
 
         #region 公开接口
@@ -176,6 +192,10 @@ namespace Ale.NodeTree.Runtime
             EnsureContainers();
             CalcAndSetRootSize(); // 计算 sizeDelta 与节点偏移量（依赖 EnsureContainers 已执行）
             EnsureCamera();
+            // 缩放：装滚轮输入区、接滑条，随后落一次倍率
+            EnsureZoomInput();
+            EnsureZoomSlider();
+            ApplyInitialZoom();
             InitPools();
             // 先建池再建弹窗层：池对象也挂在本窗口下，反过来会把弹窗层挤出末位
             InitInfoPanelPool();
@@ -1023,6 +1043,307 @@ namespace Ale.NodeTree.Runtime
             LineTypeData lineData,
             ELayoutDirection dir)
             => NodeLineBuilder.BuildCombinedLineMesh(segments, lineData, dir);
+        #endregion
+        
+        #region 缩放
+        [Header("缩放")]
+        [Tooltip("是否启用运行时缩放（滚轮 + 滑条）。\n" +
+                 "关闭后完全恢复旧行为：不装滚轮输入区（滚轮回到 ScrollRect 的滚动），\n" +
+                 "并在 InitTree 时把节点树还原成 1 倍。")]
+        [SerializeField] private bool zoomEnabled = true;
+
+        [Tooltip("最小缩放倍率。必须 > 0：滑条走对数映射，要除以 ln(maxZoom / minZoom)。")]
+        [SerializeField] private float minZoom = 0.1f;
+
+        [Tooltip("最大缩放倍率。")]
+        [SerializeField] private float maxZoom = 3f;
+
+        [Tooltip("默认缩放倍率。resetZoomOnInit 打开时，每次 InitTree 都回到这个值。")]
+        [SerializeField] private float defaultZoom = 1f;
+
+        [Tooltip("每格滚轮的缩放倍数（乘性）。1.15 = 每格放大 15%，走完 0.1x~3.0x 全程约 24 格。\n" +
+                 "乘性步进配对数滑条，滚轮每格在滑条上移动的距离才是等距的，\n" +
+                 "缩放手感在任何倍率下也才一致（0.2x 时不会一格就跳一大截）。")]
+        [SerializeField] private float zoomStepPerScroll = 1.15f;
+
+        [Tooltip("滚轮输入区。留空则自动取 nodeTreeRoot 所属 ScrollRect 的 Viewport，再回落 nodeTreeRoot 的父级。\n" +
+                 "⚠ 它必须是「射线能命中的东西」的祖先、且位于 ScrollRect 之下，否则滚轮会被 ScrollRect 抢走，\n" +
+                 "原因见 UINodeTreeZoomArea 的类摘要。")]
+        [SerializeField] private RectTransform zoomInputArea;
+
+        [Tooltip("缩放滑条（可留空 = 只有滚轮）。取值被强制为归一化的 0~1，与倍率之间走对数映射\n" +
+                 "（默认范围下 1.0x 落在 68% 处）。这样换缩放范围时不必再去改每个界面上滑条的 Min / Max。")]
+        [SerializeField] private Slider zoomSlider;
+
+        [Tooltip("显示当前倍率的文本（可留空）。")]
+        [SerializeField] private TMP_Text zoomValueText;
+
+        [Tooltip("倍率文本的格式串，参数 0 是当前倍率。")]
+        [SerializeField] private string zoomValueFormat = "{0:0.0}x";
+
+        [Tooltip("InitTree 时把缩放复位到 defaultZoom。关闭则跨越重建保留当前倍率。")]
+        [SerializeField] private bool resetZoomOnInit = true;
+
+        // 当前倍率。真值存在这里而不是每次去读 nodeTreeRoot.localScale：后者可能被外部改写，
+        // 而滑条与倍率文本必须和「窗口认为的倍率」保持一致。
+        private float _zoom = 1f;
+
+        // nodeTreeRoot 所属的 ScrollRect。可能为 null —— 宿主不一定用 ScrollView 承载节点树。
+        private ScrollRect _scrollRect;
+
+        // 运行时实际使用的滚轮输入区，以及那个组件是否由本窗口装上（决定销毁时该不该拆）
+        private UINodeTreeZoomArea _zoomArea;
+        private bool               _ownsZoomArea;
+
+        // 已接线的滑条。宿主可能在运行时换一根，换掉时要把旧的监听摘干净。
+        private Slider _hookedZoomSlider;
+
+        /// <summary>当前缩放倍率。</summary>
+        public float Zoom => _zoom;
+
+        /// <summary>缩放倍率变化时触发。滚轮、滑条与代码调用都会触发。</summary>
+        public event Action<float> ZoomChanged;
+
+        /// <summary>设置缩放倍率，以<b>视口中心</b>为锚点（该点在屏幕上的位置保持不变）。</summary>
+        public void SetZoom(float zoom) => ApplyZoom(zoom, ViewportCenterWorld());
+
+        /// <summary>设置缩放倍率，以指定<b>屏幕点</b>为锚点（该点下方的节点在缩放前后停在原处）。</summary>
+        public void SetZoom(float zoom, Vector2 screenPoint)
+            => ApplyZoom(zoom, ScreenPointToTreeWorld(screenPoint));
+
+        /// <summary>把缩放复位到 <c>defaultZoom</c>，以视口中心为锚点。</summary>
+        public void ResetZoom() => SetZoom(defaultZoom);
+
+        /// <summary>
+        /// 滚轮缩放。由 <see cref="UINodeTreeZoomArea"/> 转调，宿主不必自己接线。
+        /// 步进是<b>乘性</b>的：<c>zoom *= zoomStepPerScroll ^ scrollDelta.y</c>，
+        /// 用 <c>Pow</c> 而非乘一个固定系数，是为了让触控板那种小数增量也能平滑生效。
+        /// </summary>
+        internal void ZoomByScroll(PointerEventData eventData)
+        {
+            if (!zoomEnabled || eventData == null) return;
+
+            float delta = eventData.scrollDelta.y;
+            if (Mathf.Approximately(delta, 0f)) return;
+
+            ApplyZoom(_zoom * Mathf.Pow(zoomStepPerScroll, delta),
+                      ScreenPointToTreeWorld(eventData.position));
+        }
+
+        /// <summary>
+        /// 装配滚轮输入区：找到 nodeTreeRoot 所属的 ScrollRect，把 <see cref="UINodeTreeZoomArea"/>
+        /// 装到它的 Viewport 上（或 Inspector 指定的 <c>zoomInputArea</c> 上）。
+        /// <para>为什么必须是 Viewport、而不能是本窗口或 Content，见 <see cref="UINodeTreeZoomArea"/> 的类摘要。</para>
+        /// </summary>
+        private void EnsureZoomInput()
+        {
+            _scrollRect = nodeTreeRoot ? nodeTreeRoot.GetComponentInParent<ScrollRect>() : null;
+
+            // 关掉开关也要把已经装上的收回去，否则运行时改这个开关只会改一半
+            if (!zoomEnabled) { ReleaseZoomArea(); return; }
+
+            var area = zoomInputArea;
+            if (!area && _scrollRect) area = _scrollRect.viewport;
+            if (!area && nodeTreeRoot) area = nodeTreeRoot.parent as RectTransform;
+
+            if (!area)
+            {
+                Debug.LogWarning(
+                    "[UINodeTreeWindow] 找不到滚轮输入区：既没有指定 zoomInputArea，nodeTreeRoot 也不在 ScrollRect 里。" +
+                    "滚轮缩放不可用，滑条仍可正常使用。", this);
+                ReleaseZoomArea();
+                return;
+            }
+
+            // 换了目标（宿主改了 zoomInputArea / 重建时 Viewport 换了实例）就先把旧的收回去
+            if (_zoomArea && _zoomArea.gameObject != area.gameObject) ReleaseZoomArea();
+
+            if (!_zoomArea)
+            {
+                _zoomArea = area.GetComponent<UINodeTreeZoomArea>();
+                // 已经有一个（宿主手工挂的 / 上一次装的）就复用，那种情况下销毁时也不该动它
+                _ownsZoomArea = !_zoomArea;
+                if (!_zoomArea) _zoomArea = area.gameObject.AddComponent<UINodeTreeZoomArea>();
+            }
+            _zoomArea.Window = this;
+
+            // 输入区收不到射线 = 滚轮静默失灵，是这套东西最难查的一种坏法，提前喊出来。
+            var graphic = area.GetComponent<Graphic>();
+            if (!graphic || !graphic.raycastTarget)
+                Debug.LogWarning(
+                    $"[UINodeTreeWindow] 滚轮输入区 \"{area.name}\" 上没有开启 Raycast Target 的 Graphic，" +
+                    "收不到指针事件，滚轮缩放不会生效。给它加一个（哪怕全透明的）Image 并勾上 Raycast Target。", this);
+        }
+
+        /// <summary>拆掉滚轮输入区：本窗口装上去的组件销毁，宿主自己挂的只解除回指。</summary>
+        private void ReleaseZoomArea()
+        {
+            if (_zoomArea)
+            {
+                if (_zoomArea.Window == this) _zoomArea.Window = null;
+                if (_ownsZoomArea) Destroy(_zoomArea);
+            }
+            _zoomArea     = null;
+            _ownsZoomArea = false;
+        }
+
+        /// <summary>
+        /// 接线缩放滑条。滑条一律走<b>归一化</b>取值（0~1），倍率映射由本窗口负责。
+        /// </summary>
+        private void EnsureZoomSlider()
+        {
+            if (_hookedZoomSlider && _hookedZoomSlider != zoomSlider)
+            {
+                _hookedZoomSlider.onValueChanged.RemoveListener(OnZoomSliderChanged);
+                _hookedZoomSlider = null;
+            }
+
+            if (!zoomSlider) return;
+
+            zoomSlider.wholeNumbers = false;
+            zoomSlider.minValue     = 0f;
+            zoomSlider.maxValue     = 1f;
+
+            if (_hookedZoomSlider == zoomSlider) return; // InitTree 可能被调多次，别重复订阅
+            zoomSlider.onValueChanged.AddListener(OnZoomSliderChanged);
+            _hookedZoomSlider = zoomSlider;
+        }
+
+        /// <summary>滑条被拖动：按对数映射换算成倍率，以视口中心为锚点缩放。</summary>
+        private void OnZoomSliderChanged(float sliderValue)
+        {
+            if (!zoomEnabled) return;
+            ApplyZoom(SliderToZoom(sliderValue), ViewportCenterWorld());
+        }
+
+        /// <summary>
+        /// InitTree 末尾落一次倍率：开启缩放时复位（或沿用）到目标倍率，关闭时把树还原成 1 倍。
+        /// </summary>
+        private void ApplyInitialZoom()
+        {
+            if (!nodeTreeRoot) return;
+
+            if (!zoomEnabled)
+            {
+                // 关掉缩放就把树还原成 1 倍，别让上一次的缩放状态留在场上
+                _zoom = 1f;
+                nodeTreeRoot.localScale = Vector3.one;
+                RefreshZoomUI();
+                return;
+            }
+
+            ApplyZoom(resetZoomOnInit ? defaultZoom : _zoom, ViewportCenterWorld(), force: true);
+        }
+
+        /// <summary>
+        /// 缩放到指定倍率，并平移 nodeTreeRoot，使 <paramref name="focusWorld"/> 这个世界点在屏幕上
+        /// 停在原处（滚轮传光标位置，滑条传视口中心）。
+        ///
+        /// <para><b>为什么缩的是 nodeTreeRoot 的 localScale</b>：它就是 ScrollRect 的 Content，而 ScrollRect
+        /// 的边界计算走 <c>content.GetWorldCorners()</c>，localScale 天然被计入 —— 夹取、弹性回弹与惯性
+        /// 全部照常工作，不需要另外去改 sizeDelta。<c>anchoredPosition</c> 在<b>父级</b>空间度量，也不受
+        /// Content 自身缩放影响，所以补偿量要先换算到父级空间再加。</para>
+        ///
+        /// <para>连带的既有表现（都是想要的，不必「修」）：连线 Mesh 在 Content 之下，随之缩放、<b>线宽也一起缩</b>；
+        /// 信息弹窗的偏移施加在弹窗层空间，<b>不随缩放变小</b>（见 <see cref="PositionInfoPanel"/>）；
+        /// <see cref="UIScrollingBackground"/> 只跟 <c>Content.anchoredPosition</c> 的增量走，所以补偿平移会让
+        /// 背景跟着平移一下（与手动平移无异），背景本身不缩放。</para>
+        /// </summary>
+        /// <param name="zoom">目标倍率，会被夹到 [minZoom, maxZoom]。</param>
+        /// <param name="focusWorld">缩放锚点（世界坐标）。</param>
+        /// <param name="force">true 时即使倍率没变也重写一遍 scale 与 UI（InitTree 重建后用）。</param>
+        private void ApplyZoom(float zoom, Vector3 focusWorld, bool force = false)
+        {
+            if (!nodeTreeRoot) return;
+
+            zoom = Mathf.Clamp(zoom, minZoom, maxZoom);
+            if (!force && Mathf.Approximately(zoom, _zoom)) return;
+
+            // 锚点在树内的局部坐标：缩放前后它都该是同一个值，缩放后它世界位置的位移就是要补的平移量。
+            Vector3 localBefore = nodeTreeRoot.InverseTransformPoint(focusWorld);
+
+            _zoom = zoom;
+            nodeTreeRoot.localScale = new Vector3(zoom, zoom, 1f);
+
+            Vector3 deltaWorld = focusWorld - nodeTreeRoot.TransformPoint(localBefore);
+            if (nodeTreeRoot.parent)
+            {
+                Vector3 deltaLocal = nodeTreeRoot.parent.InverseTransformVector(deltaWorld);
+                nodeTreeRoot.anchoredPosition += new Vector2(deltaLocal.x, deltaLocal.y);
+            }
+
+            // 不停惯性的话，滚轮缩放时残留的甩动会在随后几帧把刚对齐的视口又带跑。
+            if (_scrollRect) _scrollRect.StopMovement();
+
+            RefreshZoomUI();
+
+            // LateUpdate 里的 lossyScale 比较也能抓到这次缩放，显式置脏只是少等一帧。
+            _visibilityDirty = true;
+
+            ZoomChanged?.Invoke(_zoom);
+        }
+
+        /// <summary>把当前倍率同步到滑条与倍率文本。</summary>
+        private void RefreshZoomUI()
+        {
+            // 必须 SetValueWithoutNotify：直接写 value 会回环 —— 写滑条 → onValueChanged → ApplyZoom → 再写滑条。
+            if (zoomSlider) zoomSlider.SetValueWithoutNotify(ZoomToSlider(_zoom));
+
+            if (zoomValueText)
+                zoomValueText.text = string.Format(
+                    string.IsNullOrEmpty(zoomValueFormat) ? "{0:0.0}x" : zoomValueFormat, _zoom);
+        }
+
+        /// <summary>倍率 → 滑条归一化值（对数映射）。</summary>
+        private float ZoomToSlider(float zoom)
+        {
+            float span = Mathf.Log(maxZoom / minZoom);
+            if (span <= 0f) return 0f;
+            return Mathf.Clamp01(Mathf.Log(zoom / minZoom) / span);
+        }
+
+        /// <summary>滑条归一化值 → 倍率（对数映射的逆）。</summary>
+        private float SliderToZoom(float sliderValue)
+            => minZoom * Mathf.Pow(maxZoom / minZoom, Mathf.Clamp01(sliderValue));
+
+        /// <summary>视口中心的世界坐标。没有 ScrollRect 时回落 nodeTreeRoot 的父级，再回落它自己。</summary>
+        private Vector3 ViewportCenterWorld()
+        {
+            RectTransform area = _scrollRect ? _scrollRect.viewport : null;
+            if (!area && nodeTreeRoot) area = nodeTreeRoot.parent as RectTransform;
+            if (!area) area = nodeTreeRoot;
+            return area ? area.TransformPoint(area.rect.center) : Vector3.zero;
+        }
+
+        /// <summary>
+        /// 屏幕点 → 节点树所在平面上的世界坐标。相机按所属 Canvas 的渲染模式取
+        /// （Overlay 传 null），与 <see cref="RefreshVisibility"/> 是同一判据。
+        /// </summary>
+        private Vector3 ScreenPointToTreeWorld(Vector2 screenPoint)
+        {
+            if (!nodeTreeRoot) return Vector3.zero;
+
+            Camera cam = (_rootCanvas && _rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                ? _rootCanvas.worldCamera
+                : null;
+
+            return RectTransformUtility.ScreenPointToWorldPointInRectangle(
+                       nodeTreeRoot, screenPoint, cam, out var world)
+                ? world
+                : ViewportCenterWorld();
+        }
+
+        /// <summary>
+        /// 夹住缩放参数，防止在 Inspector 里填出会让对数映射炸掉的值（minZoom ≤ 0 会除出 NaN）。
+        /// 本类目前只有这一组参数需要校验，故直接放在本 region 内。
+        /// </summary>
+        private void OnValidate()
+        {
+            minZoom           = Mathf.Max(0.01f, minZoom);
+            maxZoom           = Mathf.Max(minZoom * 1.01f, maxZoom);
+            defaultZoom       = Mathf.Clamp(defaultZoom, minZoom, maxZoom);
+            zoomStepPerScroll = Mathf.Max(1.001f, zoomStepPerScroll);
+        }
         #endregion
         
         #region 视口裁剪
